@@ -1,84 +1,111 @@
 <!-- assisted-by: IBM Bob 2.0 final-polish (first draft); revised by the developer -->
 # PreFlight — Demo Video Script (3 minutes maximum)
 
-Rules from the hackathon: maximum 3 minutes, at least 90 seconds of the solution running on screen,
-narration, and a clear demonstration of how IBM Bob was used. Lines marked **SAY** are the narration
-(about 350 words, roughly 2.5 minutes at a calm pace, leaving time for screen actions).
+Hackathon rules: maximum 3 minutes, at least 90 seconds of the solution running on screen,
+narration, and a clear demonstration of how IBM Bob was used.
 
-Before recording: run `run.bat`, open http://127.0.0.1:8000, zoom the browser to 100% or 110%,
-close other windows, and do one practice take.
+Recorded as three clips, then joined:
+
+| Clip | Time | What is on screen |
+|------|------|-------------------|
+| 1 | 0:00 – 0:20 | Terminal: list of changed files |
+| 2 | 0:20 – 2:15 | Starting PreFlight and the dashboard, top to bottom |
+| 3 | 2:15 – 3:00 | Bob IDE, session screenshots, tests passing |
+
+Before recording: stop PreFlight if it is running, open a terminal in the project folder
+(text enlarged with Ctrl and +), open the browser at 100% zoom, open Bob, open three screenshots
+from `bob_sessions/` in Photos, close everything else and turn on Do Not Disturb.
 
 ---
 
-## 0:00 – 0:20 · The problem
+## Clip 1 · 0:00 – 0:20 · The problem
 
-**SCREEN:** a terminal running `git -C sample-repo diff v1.0.0 v1.1.0 --stat`, showing ten changed files.
+**SCREEN:** in the terminal, type and run:
 
-**SAY:** "Before every release, someone has to review every changed file. Does each migration have
-matching code? Is every new environment variable documented? Does every new function have a test?
-Doing that by hand is slow, and things get missed. PreFlight does it in a second."
+```
+git -C sample-repo diff v1.0.0 v1.1.0 --stat
+```
 
-## 0:20 – 2:15 · Live demo (115 seconds on screen)
+The list of 10 changed files stays on screen.
+
+**SAY:** "Every release day, somebody reads through every changed file and asks the same questions
+by hand. Does this migration actually have matching code? Is every new variable documented? Does
+anything have a test? It's slow, and things slip through anyway. PreFlight does that whole check for you."
+
+---
+
+## Clip 2 · 0:20 – 2:15 · Live demo
 
 ### 0:20 · Start
-**SCREEN:** Windows terminal, type `run.bat`, then the browser opens the dashboard.
+**SCREEN:** in the terminal, type `.\run.bat` and press Enter. Wait for "Application startup complete"
+(cut the waiting when editing). Open `http://127.0.0.1:8000` in the browser.
 
-**SAY:** "One command starts everything locally: no cloud, no API keys. This is a sample orders API
-with four problems planted between version 1.0.0 and 1.1.0."
+**SAY:** "Everything runs locally, one command. No cloud, no API keys. This is a sample orders API,
+and I've planted four real problems between versions 1.0.0 and 1.1.0."
 
 ### 0:35 · Run
-**SCREEN:** the tag boxes (From v1.0.0, To v1.1.0), click **Run Analysis**.
+**SCREEN:** show From = v1.0.0 and To = v1.1.0, then click **Run Analysis**.
 
-**SAY:** "From is the older tag, To the newer one. Run analysis. The report is ready in under a second."
+**SAY:** "Older tag in From, newer in To. Hit run... and the full report is ready in under a second."
 
 ### 0:45 · Risk score
-**SCREEN:** the Risk Score card: 82, CRITICAL, and the list of drivers.
+**SCREEN:** the Risk Score card: 82, CRITICAL, and the list of risk drivers.
 
-**SAY:** "Risk score: 82, critical. The drivers explain why: the renamed total field is a breaking
-change, plus a migration with no code and an undocumented environment variable."
+**SAY:** "Risk score 82, critical. And it tells you why. The renamed total field is a breaking change.
+There's a migration that nothing uses. And an environment variable nobody documented."
 
 ### 1:00 · Changed files
-**SCREEN:** the Changed Files card; point at `app/config.py` (safe) and `app/pricing.py` (risky).
+**SCREEN:** scroll to the Changed Files card; point the mouse at `app/config.py` (SAFE), then at
+`app/pricing.py` (RISKY).
 
-**SAY:** "Every changed file is classified breaking, risky or safe, with a reason. The docstring-only
-change to config is correctly safe, and the pricing module is flagged for a new public function."
+**SAY:** "Every changed file gets classified as breaking, risky, or safe, always with a reason. That
+docstring-only change in config? Correctly marked safe. The pricing module gets flagged for its new
+public function."
 
 ### 1:15 · Coverage
-**SCREEN:** the Coverage card; open the `tests/test_pricing.py` stub.
+**SCREEN:** scroll to the Coverage card; point at the `app/pricing.py` gap, then click
+`tests/test_pricing.py` under Generated test stubs to open it.
 
-**SAY:** "Coverage gaps: calculate_total_cents was added to pricing, but the existing pricing tests
-never call it. PreFlight even generates the test to add."
+**SAY:** "Coverage gaps. Calculate total cents was added, but the existing pricing tests never call it.
+And PreFlight writes the missing test for you."
 
 ### 1:30 · Sentinel
-**SCREEN:** the Sentinel Findings card, three HIGH items; click "Show evidence" on one.
+**SCREEN:** scroll to the Sentinel Findings card (three HIGH findings). On the last sentence, click
+**Show evidence** under one finding.
 
-**SAY:** "Sentinel found three high-severity problems. One: the migration adds a discount_code
-column, but no code uses it. Two: the response field total was removed, which breaks existing API
-clients. Three: the payment webhook secret is read from the environment, but missing from dot-env example."
+**SAY:** "Three high-severity findings. A discount code column that no code touches. A response field
+that was removed, which would break every existing API client. And a webhook secret read from the
+environment but missing from the example file. Let's open the evidence."
 
-### 1:55 · Notes, fixes, rollback
-**SCREEN:** scroll through Release Notes, Fix Before Release and Rollback Plan.
+### 1:55 · Release notes, fixes, rollback
+**SCREEN:** scroll slowly through Release Notes, Fix Before Release and Rollback Plan.
 
-**SAY:** "It drafts release notes from the commit messages, lists what to fix before release, and gives
-an ordered rollback plan: revert the migration, revert the code, redeploy the previous tag, verify."
+**SAY:** "Last section. Release notes drafted from the commit history, a short list of what to fix
+before release, and a rollback plan you could literally follow step by step."
 
 ---
 
-## 2:15 – 3:00 · How IBM Bob was used
+## Clip 3 · 2:15 – 3:00 · How IBM Bob was used
 
-**SCREEN:** the Bob IDE, then two or three screenshots from `bob_sessions/` (planning summary, parallel build summary, quality fixes summary), then the terminal showing `python -m pytest tests -q` with 121 passed.
+**SCREEN, in this order while speaking:**
+1. The Bob IDE with the task list open (list icon at the top of the Bob panel).
+2. `bob_sessions/ivane_task02_planning_summary.png` (Plan mode), a few seconds.
+3. `bob_sessions/ivane_task03_sample_repo_and_parallel_build_summary.png` (parallel subagents), a few seconds.
+4. `bob_sessions/ivane_task06_quality_fixes_2_summary.png` (fix round), a few seconds.
+5. The terminal: press Ctrl+C, type S and Enter, then run `python -m pytest tests -q` and show "121 passed".
 
-**SAY:** "I built PreFlight with IBM Bob 2.0. In Plan mode, Bob designed the architecture. In Agent mode it
-built the sample repo, then ran three subagents in parallel for the diff engine, coverage mapper and
-sentinel, and later two more for the drafter and the dashboard. After each phase I reviewed the output,
-found problems, like a wrong coverage reason and a risk score stuck at 100, and had Bob fix them.
-The result: 121 passing tests and zero external services. PreFlight: ship with confidence."
+**SAY:** "One more thing. I built all of this with IBM Bob 2.0. Bob designed the architecture in Plan
+mode, then built the sample repo and ran three subagents in parallel, one on the diff engine, one on
+coverage, one on the sentinel checks. Two more joined later for the release notes and the dashboard.
+I reviewed Bob's work after every phase and caught real problems, like a coverage reason that was
+wrong and a risk score stuck at 100, and Bob fixed them. The result: 121 passing tests, zero external
+services. PreFlight. Ship with confidence."
 
 ---
 
 ## Recording tips
 
-- Speak slowly, and pause while something loads. Trim silence when editing.
-- Keep the total under 3:00. Judges will not watch past that.
-- Show your voice and screen only; appearing on camera is optional.
-- Export as MP4.
+- Speak calmly and pause briefly between sections; trim silences when editing.
+- Keep the final video under 3:00.
+- Screen and voice are enough; appearing on camera is optional.
+- Export as MP4 (1080p).

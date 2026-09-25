@@ -15,5 +15,4 @@ were run. The full task log is in [`../BOB_USAGE.md`](../BOB_USAGE.md).
 | `ivane_task06_quality_fixes_2_summary.png` | **Second fix round.** Tag defaults, diminishing-returns risk score, commit-based release notes, rollback plan split, stub handling, Windows run script. 105 tests passed. |
 | `ivane_task07_final_fixes_summary.png` | **Third fix round.** Repo-path test lookup, range validation (HTTP 400), merged breaking-change notes, specific diff reasons. 117 tests passed. |
 | `ivane_task07_final_fixes_todo.png` | **Same task, to-do list.** All 11 steps completed. |
-
-If more screenshots are added (for example the final polish task), add a row for each.
+| `ivane_task08_polish_summary.png` | **Final polish.** Stub import fix, dropdown direction fix, `.gitignore`, `sample-repo.bundle`, MIT license, README, demo script and submission statements. 121 tests passed. |

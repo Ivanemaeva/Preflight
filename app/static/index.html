@@ -1,0 +1,650 @@
+<!-- assisted-by: IBM Bob 2.0 Phase 3b — DASHBOARD -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PreFlight — Release Risk Auditor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    background: #f0f2f5;
+    color: #1f2328;
+  }
+
+  header {
+    background: #1f2328;
+    color: #fff;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  header span.sub { font-size: 13px; color: #8b949e; margin-top: 2px; }
+
+  .page { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+
+  /* ── Control bar ── */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+  }
+  .controls label { font-size: 12px; font-weight: 600; color: #57606a; display: block; margin-bottom: 4px; }
+  .controls select {
+    padding: 7px 28px 7px 10px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2357606a' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    cursor: pointer;
+    min-width: 130px;
+  }
+  .controls select:focus { outline: 2px solid #3b82d4; outline-offset: 1px; border-color: transparent; }
+  .btn-run {
+    padding: 8px 20px;
+    background: #3b82d4;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    align-self: flex-end;
+    margin-bottom: 0;
+  }
+  .btn-run:hover { background: #2563b0; }
+  .btn-run:disabled { background: #93c5fd; cursor: not-allowed; }
+
+  /* ── Cards ── */
+  .card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1f2328;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .icon { font-size: 17px; }
+
+  /* ── Risk gauge ── */
+  .gauge-row { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .gauge-score {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+    min-width: 80px;
+  }
+  .gauge-bar-wrap { flex: 1; }
+  .gauge-label { font-size: 12px; color: #57606a; margin-bottom: 6px; }
+  .gauge-track {
+    height: 18px;
+    background: #e5e7eb;
+    border-radius: 9px;
+    overflow: hidden;
+  }
+  .gauge-fill {
+    height: 100%;
+    border-radius: 9px;
+    transition: width 0.5s ease;
+  }
+  .range-info { font-size: 13px; color: #57606a; margin-top: 6px; }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+  }
+  .badge-critical { background: #fee2e2; color: #991b1b; }
+  .badge-high     { background: #ffedd5; color: #9a3412; }
+  .badge-medium   { background: #fef9c3; color: #854d0e; }
+  .badge-low      { background: #dcfce7; color: #166534; }
+  .badge-breaking { background: #fee2e2; color: #991b1b; }
+  .badge-risky    { background: #ffedd5; color: #9a3412; }
+  .badge-safe     { background: #dcfce7; color: #166534; }
+  .badge-added    { background: #dbeafe; color: #1e40af; }
+  .badge-modified { background: #f3f4f6; color: #374151; }
+
+  /* ── Drivers list ── */
+  .drivers { list-style: none; margin-top: 4px; }
+  .drivers li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 13px;
+  }
+  .drivers li:last-child { border-bottom: none; }
+  .driver-pts {
+    font-weight: 700;
+    color: #dc2626;
+    min-width: 34px;
+    text-align: right;
+    font-size: 13px;
+  }
+
+  /* ── Changes table ── */
+  .changes-list { list-style: none; }
+  .changes-list li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+    align-items: start;
+  }
+  .changes-list li:last-child { border-bottom: none; }
+  .change-path { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 13px; font-weight: 600; color: #1f2328; }
+  .change-reason { font-size: 12px; color: #57606a; margin-top: 2px; }
+  .change-lines { font-size: 12px; white-space: nowrap; text-align: right; margin-top: 2px; }
+  .lines-added { color: #16a34a; font-weight: 600; }
+  .lines-removed { color: #dc2626; font-weight: 600; }
+
+  /* ── Coverage gaps ── */
+  .gap-list { list-style: none; }
+  .gap-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .gap-list li:last-child { border-bottom: none; }
+  .gap-path { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 13px; font-weight: 600; }
+  .gap-reason { font-size: 12px; color: #57606a; margin-top: 2px; }
+  .gap-suggestion { font-size: 12px; color: #3b82d4; margin-top: 3px; }
+  .gap-suggestion::before { content: "💡 Suggested: "; font-weight: 600; }
+
+  /* ── Sentinel findings ── */
+  .finding-list { list-style: none; }
+  .finding-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .finding-list li:last-child { border-bottom: none; }
+  .finding-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .finding-kind { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 13px; font-weight: 600; }
+  .finding-location { font-size: 12px; color: #57606a; }
+  .finding-detail { font-size: 13px; color: #1f2328; margin-top: 2px; }
+  details.evidence { margin-top: 6px; }
+  details.evidence summary {
+    font-size: 12px;
+    color: #3b82d4;
+    cursor: pointer;
+    user-select: none;
+  }
+  details.evidence summary:hover { color: #2563b0; }
+  details.evidence pre {
+    margin-top: 6px;
+    background: #f6f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 5px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #24292f;
+  }
+
+  /* ── Release notes ── */
+  .release-notes {
+    background: #f6f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    overflow-x: auto;
+    color: #24292f;
+  }
+
+  /* ── Rollback steps ── */
+  .rollback-list { list-style: none; counter-reset: step-counter; }
+  .rollback-list li {
+    counter-increment: step-counter;
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+    align-items: flex-start;
+  }
+  .rollback-list li:last-child { border-bottom: none; }
+  .step-num {
+    min-width: 28px;
+    height: 28px;
+    background: #1f2328;
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .step-action { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 13px; font-weight: 600; color: #1f2328; }
+  .step-reason { font-size: 12px; color: #57606a; margin-top: 2px; }
+
+  /* ── State messages ── */
+  .state-msg {
+    padding: 14px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .state-msg.visible { display: block; }
+  .state-loading { background: #dbeafe; color: #1e3a5f; border: 1px solid #93c5fd; }
+  .state-error   { background: #fee2e2; color: #7f1d1d; border: 1px solid #fca5a5; }
+
+  #report { display: none; }
+  #report.visible { display: block; }
+
+  /* ── Summary strip ── */
+  .summary-strip {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  .summary-chip {
+    background: #f6f8fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: #57606a;
+  }
+  .summary-chip strong { color: #1f2328; }
+
+  /* ── Covered files ── */
+  .covered-list { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .covered-list li {
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    font-size: 12px;
+    background: #dcfce7;
+    color: #166534;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .section-sub { font-size: 12px; font-weight: 600; color: #57606a; text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 8px; }
+  .empty-note { font-size: 13px; color: #57606a; font-style: italic; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>✈ PreFlight</h1>
+    <span class="sub">Release Risk Auditor</span>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- Controls -->
+  <div class="controls">
+    <div>
+      <label for="sel-from">From tag</label>
+      <select id="sel-from"></select>
+    </div>
+    <div>
+      <label for="sel-to">To tag</label>
+      <select id="sel-to"></select>
+    </div>
+    <button class="btn-run" id="btn-run" onclick="runAnalysis()">Run Analysis</button>
+  </div>
+
+  <!-- Loading / Error state -->
+  <div class="state-msg state-loading" id="msg-loading">⏳ Fetching report…</div>
+  <div class="state-msg state-error"   id="msg-error"></div>
+
+  <!-- Report output -->
+  <div id="report">
+
+    <!-- Summary strip -->
+    <div class="summary-strip" id="summary-strip"></div>
+
+    <!-- Risk score -->
+    <div class="card" id="card-risk">
+      <div class="card-title"><span class="icon">🎯</span> Risk Score</div>
+      <div id="risk-content"></div>
+    </div>
+
+    <!-- Risky changes -->
+    <div class="card" id="card-changes">
+      <div class="card-title"><span class="icon">📝</span> Changed Files</div>
+      <div id="changes-content"></div>
+    </div>
+
+    <!-- Coverage -->
+    <div class="card" id="card-coverage">
+      <div class="card-title"><span class="icon">🧪</span> Coverage</div>
+      <div id="coverage-content"></div>
+    </div>
+
+    <!-- Sentinel -->
+    <div class="card" id="card-sentinel">
+      <div class="card-title"><span class="icon">🔍</span> Sentinel Findings</div>
+      <div id="sentinel-content"></div>
+    </div>
+
+    <!-- Release notes -->
+    <div class="card" id="card-release">
+      <div class="card-title"><span class="icon">📋</span> Release Notes</div>
+      <div id="release-content"></div>
+    </div>
+
+    <!-- Rollback -->
+    <div class="card" id="card-rollback">
+      <div class="card-title"><span class="icon">↩️</span> Rollback Plan</div>
+      <div id="rollback-content"></div>
+    </div>
+
+  </div><!-- /#report -->
+
+</div><!-- /.page -->
+
+<script>
+/* ────────────────────────────────────────────────────
+   FIXTURE DATA — used when backend is unavailable
+──────────────────────────────────────────────────── */
+const FIXTURE_DATA = {"range":{"from":"v1.0.0","to":"v1.1.0","commits":9,"files_changed":8},"risk":{"score":95,"level":"critical","drivers":[{"label":"breaking change in app/schemas.py (total renamed to total_cents, type changed)","points":25},{"label":"breaking change in app/routes/orders.py (response field rename)","points":25},{"label":"sentinel: migration_no_code — migrations/0003_add_discount_code.sql","points":20},{"label":"sentinel: api_breaking — app/schemas.py total->total_cents","points":20},{"label":"sentinel: env_undocumented — PAYMENT_WEBHOOK_SECRET in app/webhooks.py","points":20},{"label":"coverage gap — app/pricing.py (calculate_total_cents untested)","points":8},{"label":"coverage gap — app/webhooks.py (no tests)","points":8}]},"changes":[{"path":"app/schemas.py","status":"modified","risk":"breaking","reason":"Public response field 'total' renamed to 'total_cents' and type changed from float to int","lines_added":1,"lines_removed":1},{"path":"app/routes/orders.py","status":"modified","risk":"breaking","reason":"All route handlers now set total_cents instead of total — clients expecting 'total' will receive null","lines_added":4,"lines_removed":4},{"path":"app/pricing.py","status":"modified","risk":"risky","reason":"New public function calculate_total_cents added with no test coverage","lines_added":12,"lines_removed":1},{"path":"app/webhooks.py","status":"added","risk":"risky","reason":"New module added with no tests; reads undocumented env var PAYMENT_WEBHOOK_SECRET","lines_added":40,"lines_removed":0},{"path":"app/main.py","status":"modified","risk":"safe","reason":"Version string bumped and webhooks router registered","lines_added":3,"lines_removed":1},{"path":"migrations/0003_add_discount_code.sql","status":"added","risk":"risky","reason":"Schema migration adds column with no corresponding ORM or application code change","lines_added":4,"lines_removed":0},{"path":"README.md","status":"modified","risk":"safe","reason":"Documentation update — new endpoint row added to table","lines_added":2,"lines_removed":0},{"path":"app/config.py","status":"modified","risk":"safe","reason":"Docstring expanded — no logic change","lines_added":4,"lines_removed":0}],"coverage":{"gaps":[{"path":"app/pricing.py","reason":"calculate_total_cents is a new public function; tests/test_pricing.py does not import or call it","suggested_test":"tests/test_pricing.py"},{"path":"app/webhooks.py","reason":"New module with no corresponding test file","suggested_test":"tests/test_webhooks.py"}],"covered":[{"path":"app/routes/orders.py","tests":["tests/test_orders.py"]},{"path":"app/schemas.py","tests":["tests/test_orders.py"]},{"path":"app/main.py","tests":["tests/test_orders.py"]},{"path":"app/config.py","tests":["tests/test_config.py"]}],"stubs":[{"path":"tests/test_webhooks.py","content":"# TODO: tests for app/webhooks.py\nimport pytest\n\n# def test_payment_webhook_missing_secret(client):\n#     resp = client.post('/webhooks/payment', json={})\n#     assert resp.status_code in (401, 503)\n"}]},"sentinel":{"findings":[{"kind":"migration_no_code","severity":"high","location":"migrations/0003_add_discount_code.sql","detail":"Migration adds 'discount_code' column to orders table but no ORM model, Pydantic schema, or route references this column","evidence":"ALTER TABLE orders ADD COLUMN discount_code TEXT DEFAULT NULL;"},{"kind":"api_breaking","severity":"high","location":"app/schemas.py","detail":"Response field 'total' (float) removed and replaced by 'total_cents' (int) — no API version bump","evidence":"-    total: float\n+    total_cents: int"},{"kind":"env_undocumented","severity":"high","location":"app/webhooks.py","detail":"PAYMENT_WEBHOOK_SECRET is read via os.getenv() but is absent from .env.example and the README env-var table","evidence":"PAYMENT_WEBHOOK_SECRET = os.getenv(\"PAYMENT_WEBHOOK_SECRET\")"}]},"drafts":{"release_notes_md":"## v1.1.0\n\n### ⚠ Breaking Changes\n- `GET /orders/{id}` and all order endpoints: response field `total` (float) has been renamed to `total_cents` (int). Update all API clients.\n\n### New Features\n- Payment webhook endpoint `POST /webhooks/payment` with HMAC-SHA256 signature verification.\n- Pricing module now exposes `calculate_total_cents` for integer-cent totals.\n\n### Database\n- Migration `0003_add_discount_code.sql`: adds optional `discount_code` column to the `orders` table.\n\n### Other\n- Config module docstring expanded.\n- README updated with webhook endpoint reference.\n","changelog_md":"### Changed\n- `OrderResponse.total: float` → `OrderResponse.total_cents: int` (breaking)\n- App version bumped to 1.1.0\n\n### Added\n- `POST /webhooks/payment` endpoint\n- `app/pricing.calculate_total_cents()`\n- `migrations/0003_add_discount_code.sql`\n- `tests/test_config.py`\n\n### Fixed\n- Config module docstring\n","rollback_steps":[{"step":1,"action":"Revert git tag to v1.0.0: git checkout v1.0.0","reason":"Breaking API change present — total renamed to total_cents"},{"step":2,"action":"Roll back database migration 0003: ALTER TABLE orders DROP COLUMN discount_code","reason":"discount_code column has no application code; safe to drop"},{"step":3,"action":"Redeploy v1.0.0 application image","reason":"Restore known-good API contract for downstream clients"}]}};
+
+/* ────────────────────────────────────────────────────
+   HELPERS
+──────────────────────────────────────────────────── */
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function badge(text, cls) {
+  return '<span class="badge badge-' + esc(cls) + '">' + esc(text) + '</span>';
+}
+
+function riskColor(level) {
+  return { low: '#16a34a', medium: '#d97706', high: '#ea580c', critical: '#dc2626' }[level] || '#57606a';
+}
+
+function gaugeColor(level) {
+  return { low: '#16a34a', medium: '#eab308', high: '#f97316', critical: '#ef4444' }[level] || '#57606a';
+}
+
+function show(id)  { document.getElementById(id).classList.add('visible');    }
+function hide(id)  { document.getElementById(id).classList.remove('visible'); }
+function setHTML(id, html) { document.getElementById(id).innerHTML = html; }
+
+/* ────────────────────────────────────────────────────
+   POPULATE TAG SELECTORS
+──────────────────────────────────────────────────── */
+async function loadTags() {
+  let tags;
+  try {
+    const resp = await fetch('/api/tags');
+    if (!resp.ok) throw new Error('status ' + resp.status);
+    tags = await resp.json();
+  } catch (e) {
+    console.warn('GET /api/tags failed, using fallback tags:', e.message);
+    tags = ['v1.0.0', 'v1.1.0'];
+  }
+  const from = document.getElementById('sel-from');
+  const to   = document.getElementById('sel-to');
+  tags.forEach(function(t, i) {
+    const o1 = new Option(t, t);
+    const o2 = new Option(t, t);
+    if (i === 0) o1.selected = true;
+    if (i === tags.length - 1) o2.selected = true;
+    from.appendChild(o1);
+    to.appendChild(o2);
+  });
+}
+
+/* ────────────────────────────────────────────────────
+   RUN ANALYSIS
+──────────────────────────────────────────────────── */
+async function runAnalysis() {
+  const from = document.getElementById('sel-from').value;
+  const to   = document.getElementById('sel-to').value;
+  const btn  = document.getElementById('btn-run');
+
+  hide('msg-error');
+  hide('report');
+  show('msg-loading');
+  btn.disabled = true;
+
+  let data;
+  try {
+    const resp = await fetch('/api/report?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to));
+    if (!resp.ok) throw new Error('Server returned ' + resp.status);
+    data = await resp.json();
+  } catch (e) {
+    console.warn('GET /api/report failed, using FIXTURE_DATA:', e.message);
+    data = FIXTURE_DATA;
+    document.getElementById('msg-error').innerHTML =
+      '⚠️ Backend unavailable — showing fixture data for <strong>' + esc(from) + ' → ' + esc(to) + '</strong>.';
+    show('msg-error');
+  }
+
+  hide('msg-loading');
+  btn.disabled = false;
+  renderReport(data);
+}
+
+/* ────────────────────────────────────────────────────
+   RENDER
+──────────────────────────────────────────────────── */
+function renderReport(d) {
+  renderSummary(d.range);
+  renderRisk(d.risk);
+  renderChanges(d.changes);
+  renderCoverage(d.coverage);
+  renderSentinel(d.sentinel);
+  renderDrafts(d.drafts);
+  show('report');
+  document.getElementById('report').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* Summary strip */
+function renderSummary(range) {
+  const html =
+    '<div class="summary-chip">Range: <strong>' + esc(range.from) + ' → ' + esc(range.to) + '</strong></div>' +
+    '<div class="summary-chip">Commits: <strong>' + esc(range.commits) + '</strong></div>' +
+    '<div class="summary-chip">Files changed: <strong>' + esc(range.files_changed) + '</strong></div>';
+  setHTML('summary-strip', html);
+}
+
+/* Risk card */
+function renderRisk(risk) {
+  const level = risk.level || 'low';
+  const score = risk.score || 0;
+  const color = gaugeColor(level);
+
+  let html = '<div class="gauge-row">';
+  html += '<div class="gauge-score" style="color:' + color + '">' + esc(score) + '</div>';
+  html += '<div class="gauge-bar-wrap">';
+  html += '<div class="gauge-label">Risk level: ' + badge(level, level) + '</div>';
+  html += '<div class="gauge-track"><div class="gauge-fill" style="width:' + score + '%;background:' + color + '"></div></div>';
+  html += '<div class="range-info">Score ' + esc(score) + ' / 100</div>';
+  html += '</div></div>';
+
+  if (risk.drivers && risk.drivers.length) {
+    const sorted = risk.drivers.slice().sort(function(a, b) { return b.points - a.points; });
+    html += '<p class="section-sub">Risk drivers</p><ul class="drivers">';
+    sorted.forEach(function(drv) {
+      html += '<li><span class="driver-pts">+' + esc(drv.points) + '</span><span>' + esc(drv.label) + '</span></li>';
+    });
+    html += '</ul>';
+  }
+
+  setHTML('risk-content', html);
+}
+
+/* Changes */
+function renderChanges(changes) {
+  if (!changes || !changes.length) {
+    setHTML('changes-content', '<p class="empty-note">No changes found.</p>');
+    return;
+  }
+  const order = { breaking: 0, risky: 1, safe: 2 };
+  const sorted = changes.slice().sort(function(a, b) {
+    return (order[a.risk] || 99) - (order[b.risk] || 99);
+  });
+
+  let html = '<ul class="changes-list">';
+  sorted.forEach(function(c) {
+    const added   = c.lines_added   > 0 ? '<span class="lines-added">+' + c.lines_added + '</span> ' : '';
+    const removed = c.lines_removed > 0 ? '<span class="lines-removed">−' + c.lines_removed + '</span>' : '';
+    html += '<li>';
+    html += '<div>';
+    html += '<div class="change-path">' + esc(c.path) + ' ' + badge(c.status || '', c.status || '') + '</div>';
+    html += '<div class="change-reason">' + esc(c.reason) + '</div>';
+    html += '</div>';
+    html += '<div style="text-align:right">';
+    html += badge(c.risk, c.risk);
+    html += '<div class="change-lines">' + added + removed + '</div>';
+    html += '</div>';
+    html += '</li>';
+  });
+  html += '</ul>';
+  setHTML('changes-content', html);
+}
+
+/* Coverage */
+function renderCoverage(cov) {
+  let html = '';
+
+  // Gaps
+  html += '<p class="section-sub">Coverage gaps (' + (cov.gaps ? cov.gaps.length : 0) + ')</p>';
+  if (cov.gaps && cov.gaps.length) {
+    html += '<ul class="gap-list">';
+    cov.gaps.forEach(function(g) {
+      html += '<li>';
+      html += '<div class="gap-path">' + esc(g.path) + '</div>';
+      html += '<div class="gap-reason">' + esc(g.reason) + '</div>';
+      if (g.suggested_test) html += '<div class="gap-suggestion">' + esc(g.suggested_test) + '</div>';
+      html += '</li>';
+    });
+    html += '</ul>';
+  } else {
+    html += '<p class="empty-note">No gaps detected.</p>';
+  }
+
+  // Covered
+  if (cov.covered && cov.covered.length) {
+    html += '<p class="section-sub">Covered files</p>';
+    html += '<ul class="covered-list">';
+    cov.covered.forEach(function(c) {
+      html += '<li title="' + esc(c.tests.join(', ')) + '">' + esc(c.path) + '</li>';
+    });
+    html += '</ul>';
+  }
+
+  // Stubs
+  if (cov.stubs && cov.stubs.length) {
+    html += '<p class="section-sub">Generated test stubs</p>';
+    cov.stubs.forEach(function(s) {
+      html += '<details class="evidence" style="margin-top:4px">';
+      html += '<summary>' + esc(s.path) + '</summary>';
+      html += '<pre>' + esc(s.content) + '</pre>';
+      html += '</details>';
+    });
+  }
+
+  setHTML('coverage-content', html);
+}
+
+/* Sentinel */
+function renderSentinel(sentinel) {
+  const findings = sentinel && sentinel.findings ? sentinel.findings : [];
+  if (!findings.length) {
+    setHTML('sentinel-content', '<p class="empty-note">No sentinel findings.</p>');
+    return;
+  }
+  let html = '<ul class="finding-list">';
+  findings.forEach(function(f) {
+    html += '<li>';
+    html += '<div class="finding-header">';
+    html += '<span class="finding-kind">' + esc(f.kind) + '</span>';
+    html += badge(f.severity, f.severity);
+    html += '</div>';
+    html += '<div class="finding-location">📍 ' + esc(f.location) + '</div>';
+    html += '<div class="finding-detail">' + esc(f.detail) + '</div>';
+    if (f.evidence) {
+      html += '<details class="evidence"><summary>Show evidence</summary><pre>' + esc(f.evidence) + '</pre></details>';
+    }
+    html += '</li>';
+  });
+  html += '</ul>';
+  setHTML('sentinel-content', html);
+}
+
+/* Drafts (release notes + rollback) */
+function renderDrafts(drafts) {
+  // Release notes
+  const notes = (drafts && drafts.release_notes_md) ? drafts.release_notes_md : '';
+  setHTML('release-content', '<pre class="release-notes">' + esc(notes) + '</pre>');
+
+  // Rollback steps
+  const steps = (drafts && drafts.rollback_steps) ? drafts.rollback_steps : [];
+  if (!steps.length) {
+    setHTML('rollback-content', '<p class="empty-note">No rollback steps.</p>');
+    return;
+  }
+  let html = '<ul class="rollback-list">';
+  steps.forEach(function(s) {
+    html += '<li>';
+    html += '<div class="step-num">' + esc(s.step) + '</div>';
+    html += '<div>';
+    html += '<div class="step-action">' + esc(s.action) + '</div>';
+    html += '<div class="step-reason">' + esc(s.reason) + '</div>';
+    html += '</div>';
+    html += '</li>';
+  });
+  html += '</ul>';
+  setHTML('rollback-content', html);
+}
+
+/* ────────────────────────────────────────────────────
+   INIT
+──────────────────────────────────────────────────── */
+loadTags();
+</script>
+
+</body>
+</html>

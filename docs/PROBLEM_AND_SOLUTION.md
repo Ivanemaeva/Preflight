@@ -1,54 +1,42 @@
-# assisted-by: IBM Bob 2.0 final-polish — problem and solution statement, task 2026-09-25
+<!-- assisted-by: IBM Bob 2.0 final-polish (first draft); revised by the developer -->
 # PreFlight — Problem and Solution
 
-## The Problem
+## The problem
 
-Every software team that ships versioned releases faces the same friction point:
-the release review. Before tagging a new version and deploying to production,
-someone must manually inspect every changed file, check that schema migrations
-have corresponding model code, confirm that new environment variables are listed
-in documentation, and verify that every new function is tested.
+Before a team ships a new version, someone has to review the release by hand. They compare the diff
+and ask the same questions every time. Does each database migration have matching application
+code? Is every new environment variable documented? Does every new function have a test? Did a
+public API change break the clients that use it?
 
-For a medium-sized release this takes 20 to 40 minutes of careful, focused work.
-For a large release it can take hours. The process is tedious, cognitively
-expensive, and failure-prone. Engineers doing it under time pressure miss things.
+This review is slow, repetitive and easy to get wrong under time pressure, and the cost of a miss is
+high. A migration with no code behind it, an undocumented environment variable that makes a new
+deployment fail at runtime, a renamed API field that breaks every client with no version bump, or an
+untested pricing function are all visible in the diff before the release ships. They still reach
+production because nobody has time to check them systematically.
 
-The consequences of missed issues are severe. A migration file without matching
-application code silently corrupts data on deploy. An undocumented environment
-variable causes a new deployment to fail at runtime — often in a way that looks
-unrelated to the release. A breaking API rename breaks every client that has not
-been updated, with no warning and no version bump to signal the change. An
-untested pricing function lets billing bugs reach production.
+## The solution
 
-These are not hypothetical scenarios. They are the kinds of issues that create
-post-mortem incident cards. And they are entirely predictable — they show up in
-the diff before the release ships.
+PreFlight is a local release risk auditor. The user picks two git tags in a small web dashboard, and
+PreFlight analyses everything that changed between them and produces a Release Readiness Report:
 
-## The Solution
+- **A risk score from 0 to 100** with a level (low, medium, high, critical) and the list of drivers behind the number.
+- **Every changed file classified** as breaking, risky or safe, with a specific reason. Docstring-only and test-only changes are recognised as safe, so the report is not noisy.
+- **Test coverage gaps at function level**, for example "calculate_total_cents() was added but no test calls it", with a generated stub test.
+- **Migration, config and environment mismatches** from the Sentinel: a migration with no matching code, an environment variable missing from `.env.example`, and breaking API response changes.
+- **Drafted release notes and changelog**, built from the commit messages, plus a "fix before release" list and an ordered rollback plan.
 
-PreFlight is a local release risk tool that automates the tedious parts of
-release review. It takes two git tags as input and runs five deterministic
-analysis steps in under a second: a diff engine that classifies every changed
-file as breaking, risky, or safe using Python AST comparison; a coverage mapper
-that checks whether every new public function is referenced by a test file; a
-sentinel that detects migration/code mismatches, undocumented environment
-variables, and breaking API signature changes; a drafter that produces
-ready-to-paste release notes and an ordered rollback plan; and an orchestrator
-that merges all findings into a single risk score on a 0 to 100 scale.
+The analysis is deterministic (git, Python AST and regular expressions). It uses no cloud services, no
+external APIs and no language model at runtime, so it runs offline in under a second: about 0.05 s
+for the sample release, measured on the API.
 
-The results are presented in a zero-install web dashboard. A reviewer opens a
-browser, selects two tags, clicks Run Analysis, and within seconds has a
-prioritised list of everything that needs attention before the release ships —
-with specific file names, function names, and actionable fix suggestions.
+## Demonstration
 
-PreFlight uses no cloud services, no external APIs, and no language model at
-runtime. All analysis is deterministic: git, Python AST, and regular expressions.
-It runs entirely on the developer's machine and works against any git repository.
+The included sample repository is a small orders API with two tagged releases. Between v1.0.0 and
+v1.1.0 four realistic problems were planted: a migration with no matching code, a backward-incompatible
+API field rename, an undocumented environment variable, and a new function with no test. PreFlight finds
+all four and rates the release 82 out of 100, critical. Its 121 automated tests cover the analysis logic.
 
-The four issues planted in the included sample repository — a migration without
-code, a breaking API rename, an undocumented env var, and an untested pricing
-change — are all caught and displayed correctly in the dashboard.
+## Scope and limits
 
----
-
-*Word count: 393*
+PreFlight targets Python / FastAPI-style projects with SQL migrations, and it was tested on the
+included sample repository. It highlights risks for a human reviewer and does not replace the review.

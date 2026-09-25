@@ -1,21 +1,19 @@
-# assisted-by: IBM Bob 2.0 final-polish — bob_sessions index, task 2026-09-25
-# bob_sessions — Screenshot Index
+<!-- assisted-by: IBM Bob 2.0 final-polish (first draft); revised by the developer -->
+# bob_sessions — IBM Bob task session summaries
 
-This directory contains screenshots taken from IBM Bob 2.0 chat sessions during
-the PreFlight build. Each image is listed below with the task it shows.
-
-Do not modify or delete these images — they are referenced by
-`docs/DEMO_SCRIPT.md` and `docs/BOB_USAGE_STATEMENT.md`.
-
----
+Screenshots of the IBM Bob task session consumption summaries (task, context length, task id,
+workspace and Bobcoins) for the PreFlight build. Task numbers follow the order in which the tasks
+were run. The full task log is in [`../BOB_USAGE.md`](../BOB_USAGE.md).
 
 | File | Task shown |
 |------|-----------|
-| `ivane_task02_planning_summary.png.png` | **Phase 1 — Planning** (Plan mode). Bob's summary after producing `docs/PLAN.md`: module layout, data flow, report JSON schema, parallel delegation table, and the seven-task plan. |
-| `ivane_task03_sample_repo_and_parallel_build_summary.png` | **Phase 2 & 3a — Sample repo + parallel subagents**. Shows the completion summary after building `sample-repo/` (21 commits, two tags, four planted issues) and launching three parallel subagents (DIFF ENGINE, COVERAGE MAPPER, SENTINEL). All 51 tests passed. |
-| `ivane_task03_todo_list_13of13.png` | **Phase 3a todo list**. The 13-of-13 completed checklist from the Phase 3a session, showing every sub-step marked done. |
-| `ivane_task04_quality_fixes_summary.png` | **Quality-fix task (first round)**. Bob's summary after upgrading coverage analysis to function-level, adding docstring-safe diff rules, and fixing test counts. 63 tests passed. |
-| `ivane_task05_drafter_dashboard_summary.png` | **Phase 3b — Drafter + Dashboard**. Summary after two parallel subagents (DRAFTER, DASHBOARD) completed and the orchestrator and FastAPI server were wired together. 80 tests passed; end-to-end smoke confirmed score 100/critical. |
-| `ivane_task06_quality_fixes_2_summary.png` | **Quality-fix task (second round)**. Six targeted fixes: dropdown defaults, diminishing-returns risk score, conventional-commit drafter, repo-path stub detection, Windows run.bat. 105 tests passed. |
-| `ivane_task07_final_fixes_summary.png` | **Four-fix task**. Summary of the final pre-polish round: repo-path test existence, range validation (HTTP 400), drafter dedup for merged breaking changes, diff reason for new public functions. 117 tests passed. |
-| `ivane_task07_final_fixes_todo.png` | **Four-fix task todo list**. The in-progress checklist screenshot from the same session. |
+| `ivane_task02_planning_summary.png` | **Planning (Plan mode).** Bob produced `docs/PLAN.md`: module layout, data flow, report schema, subagent delegation and task list. |
+| `ivane_task03_sample_repo_and_parallel_build_summary.png` | **Sample repository and Phase 3a.** Bob built `sample-repo/` (21 commits, two tags, four planted issues), then ran three parallel subagents (diff engine, coverage mapper, sentinel). 51 tests passed. |
+| `ivane_task03_todo_list_13of13.png` | **Same task, to-do list.** All 13 steps completed. |
+| `ivane_task04_quality_fixes_summary.png` | **First fix round.** Function-level coverage gaps, docstring-safe diff rules. 63 tests passed. |
+| `ivane_task05_drafter_dashboard_summary.png` | **Phase 3b.** Two parallel subagents (drafter, dashboard), then the orchestrator, API and run scripts. 80 tests passed. |
+| `ivane_task06_quality_fixes_2_summary.png` | **Second fix round.** Tag defaults, diminishing-returns risk score, commit-based release notes, rollback plan split, stub handling, Windows run script. 105 tests passed. |
+| `ivane_task07_final_fixes_summary.png` | **Third fix round.** Repo-path test lookup, range validation (HTTP 400), merged breaking-change notes, specific diff reasons. 117 tests passed. |
+| `ivane_task07_final_fixes_todo.png` | **Same task, to-do list.** All 11 steps completed. |
+
+If more screenshots are added (for example the final polish task), add a row for each.

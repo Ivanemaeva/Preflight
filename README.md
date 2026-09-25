@@ -1,189 +1,121 @@
-# assisted-by: IBM Bob 2.0 final-polish — README, task 2026-09-25
+<!-- assisted-by: IBM Bob 2.0 final-polish (README first draft); revised by the developer -->
 # PreFlight — Release Risk Auditor
 
 ![PreFlight dashboard](docs/dashboard.png)
 
-**PreFlight** is a local release risk tool. Give it two git tags and it tells
-you exactly what changed, what tests are missing, what config or migration
-hazards were introduced, and whether the release is safe to ship — in seconds,
-with zero cloud services.
+**PreFlight** answers one question before every release: *"what could this deploy break?"*
+Give it two git tags and it analyses everything that changed between them, then shows a
+**Release Readiness Report** in a local web dashboard: a risk score, risk-classified changes,
+test coverage gaps, migration / config / environment mismatches, drafted release notes and a
+rollback plan. Everything runs on your machine, with no cloud services and no language model at runtime.
 
----
+## Quick start
 
-## The Problem
+Requirements: Python 3 (tested on 3.11 and 3.13) and git.
 
-Release reviews are slow and error-prone. Before shipping a new tag, engineers
-must manually compare diffs, check that every migration has matching code,
-confirm that new env vars are documented, and verify that every new function has
-a test. Doing this by hand takes hours, misses things, and creates anxiety.
-PreFlight automates the tedious parts so reviewers can focus on judgment calls.
-
----
-
-## How It Works
-
-PreFlight runs five analysis steps in sequence when you request a report:
-
-| Step | Module | What it does |
-|------|--------|--------------|
-| **Diff engine** | `app/diff_engine.py` | Classifies every changed file as `breaking`, `risky`, or `safe` using Python AST diffing and heuristics. Rule 0a: test files are safe unless deleted. Rule 0b: docstring/comment-only changes are safe. Rule 4b: new public functions are flagged by name. |
-| **Coverage mapper** | `app/coverage.py` | For each changed Python source file, finds the corresponding test file by naming convention and import scan, then checks that every new public function is called by at least one test. Generates skeleton stub content when gaps are found. |
-| **Sentinel** | `app/sentinel.py` | Detects migration files added without matching model changes, new environment variables absent from `.env.example`, and breaking API signature changes. |
-| **Drafter** | `app/drafter.py` | Builds human-readable release notes (grouped by conventional-commit type), a changelog, a list of pre-release fixes, and ordered rollback steps from real git commits and findings. |
-| **Orchestrator** | `app/report.py` | Merges all findings, de-duplicates overlapping signals, and computes a 0–100 risk score using diminishing returns (`score = round(100 * (1 - exp(-raw/80)))`). Level bands: 0–24 low · 25–49 medium · 50–74 high · 75+ critical. |
-
-The FastAPI backend (`app/main.py`) exposes two endpoints:
-
-- `GET /api/tags` — returns the list of git tags (newest first).
-- `GET /api/report?from=<tag>&to=<tag>` — runs the full analysis and returns a
-  JSON report.
-
-The frontend (`app/static/index.html`) is a single-file HTML/JS dashboard with
-no build step. It fetches the JSON, renders the risk gauge, changed-files table,
-coverage gaps, sentinel findings, release notes, and rollback plan.
-
----
-
-## Running on Windows
+**Windows**
 
 ```bat
 run.bat
 ```
 
-If `sample-repo/` does not exist, the script clones it from `sample-repo.bundle`
-before starting the server.
-
-Optional: pass an alternative repo path as the first argument:
-
-```bat
-run.bat C:\path\to\your-repo
-```
-
----
-
-## Running on Linux / macOS
+**Linux / macOS**
 
 ```bash
 chmod +x run.sh
 ./run.sh
 ```
 
-Same behaviour: clones from `sample-repo.bundle` if `sample-repo/` is absent.
+The script installs the dependencies, creates the demo repository `sample-repo/` from
+`sample-repo.bundle` on first run, and starts the server. Then open
+<http://127.0.0.1:8000>, choose two tags (From = older, To = newer) and click **Run Analysis**.
 
-Optional:
+To analyse your own repository, pass its path: `run.bat C:\path\to\repo` or `./run.sh /path/to/repo`.
 
-```bash
-./run.sh /path/to/your-repo
-```
+## The problem
 
----
+Before shipping a release, someone has to compare the diff by hand: does every migration have
+matching code, is every new environment variable documented, does every new function have a test,
+did a public API change break existing clients? This is slow, easy to get wrong under time
+pressure, and the mistakes it misses show up in production. PreFlight automates these checks.
 
-## Using PreFlight
+## How it works
 
-1. Start the server (see above). It will install dependencies and launch on
-   `http://127.0.0.1:8000`.
-2. Open `http://127.0.0.1:8000` in your browser.
-3. Choose a **From** tag (older release) and a **To** tag (newer release).
-4. Click **Run Analysis**.
-5. The dashboard renders the risk score, ranked change drivers, changed files
-   with risk classification, coverage gaps, sentinel findings, release notes,
-   pre-release fix checklist, and rollback plan.
+| Step | Module | What it does |
+|------|--------|--------------|
+| Diff engine | `app/diff_engine.py` | Classifies each changed file as `breaking`, `risky` or `safe`, with a reason (Python AST comparison plus heuristics). Docstring-only changes and test files are safe. |
+| Coverage mapper | `app/coverage.py` | Finds the test file for each changed module and checks that every new public function is referenced by a test. Generates stub tests for the gaps. |
+| Sentinel | `app/sentinel.py` | Detects SQL migrations with no matching code, environment variables missing from `.env.example`, and breaking API response changes. |
+| Drafter | `app/drafter.py` | Drafts release notes and a changelog from the commit messages and findings, a "fix before release" list, and an ordered rollback plan. |
+| Orchestrator | `app/report.py` | Merges the findings, avoids double-counting one root cause, and computes a 0–100 score: `round(100 * (1 - exp(-raw / 80)))`. Bands: 0–24 low, 25–49 medium, 50–74 high, 75+ critical. |
 
----
+The FastAPI backend (`app/main.py`) exposes `GET /api/tags` and `GET /api/report?from=<tag>&to=<tag>`.
+Invalid ranges (unknown tag, equal tags, or `from` newer than `to`) return HTTP 400.
+The dashboard (`app/static/index.html`) is a single HTML/JS file with no build step.
 
-## The Four Planted Issues in `sample-repo`
+## Demo repository and the four planted issues
 
-The included `sample-repo` is a realistic FastAPI Orders API with exactly four
-deliberate problems in the `v1.0.0 → v1.1.0` diff. PreFlight catches all four:
+`sample-repo` is a small FastAPI orders service with 21 commits and two tags. Between `v1.0.0`
+and `v1.1.0` (9 commits, 10 files) four realistic problems were planted, plus some harmless changes:
 
-| Issue | What it is | Where PreFlight catches it |
-|-------|-----------|---------------------------|
-| **Schema migration without code** | `migrations/0003_add_discount_code.sql` adds a `discount_code` column but no model field was added. | Sentinel · `migration_no_code` finding |
-| **Breaking API rename** | `OrderResponse.total` was renamed to `total_cents` and changed type from `float` to `int` — no version bump. | Diff engine · `breaking` · Sentinel · `api_breaking` |
-| **Undocumented env var** | `DISCOUNT_RATE` is used in `app/pricing.py` but not listed in `.env.example`. | Sentinel · `env_undocumented` |
-| **Untested pricing change** | `calculate_total_cents()` was added in `app/pricing.py` with no test calling it, despite `tests/test_pricing.py` existing. | Coverage mapper · gap with function-level reason |
+| Planted issue | Where | How PreFlight catches it |
+|---------------|-------|--------------------------|
+| Schema migration with no matching code | `migrations/0003_add_discount_code.sql` adds `discount_code`, nothing uses it | Sentinel: `migration_no_code` (high) |
+| Backward-incompatible API change, no version bump | `OrderResponse.total` (float) became `total_cents` (int) in `app/schemas.py` | Diff engine: `breaking`; Sentinel: `api_breaking` (high) |
+| Undocumented environment variable | `PAYMENT_WEBHOOK_SECRET` is read in `app/webhooks.py` but absent from `.env.example` and the README | Sentinel: `env_undocumented` (high), also listed under "Fix before release" |
+| Changed module without test coverage | `calculate_total_cents()` was added to `app/pricing.py`; `tests/test_pricing.py` never calls it | Coverage mapper: function-level gap plus a stub test |
 
----
+Result on the sample release: **score 82, critical**. The report is generated in about 0.05 s
+(measured on the API), and every section is populated from real analysis.
 
-## Report JSON Schema (short form)
+## Report JSON (short form)
 
 ```jsonc
 {
-  "range":    { "from": "v1.0.0", "to": "v1.1.0", "commits": 12, "files_changed": 7 },
-  "risk":     { "score": 82, "level": "critical", "drivers": [ ... ] },
+  "range":    { "from": "v1.0.0", "to": "v1.1.0", "commits": 9, "files_changed": 10 },
+  "risk":     { "score": 82, "level": "critical", "drivers": [ { "label": "...", "points": 25 } ] },
   "changes":  [ { "path": "...", "status": "modified", "risk": "breaking", "reason": "..." } ],
-  "coverage": {
-    "gaps":    [ { "path": "...", "reason": "...", "suggested_test": "..." } ],
-    "covered": [ { "path": "...", "tests": ["..."] } ],
-    "stubs":   [ { "path": "...", "content": "# Auto-generated stub ..." } ]
-  },
-  "sentinel": {
-    "findings": [ { "kind": "migration_no_code", "severity": "high", "location": "...", "detail": "...", "evidence": "..." } ]
-  },
-  "drafts": {
-    "release_notes_md": "## v1.1.0\n...",
-    "changelog_md":     "### Changed\n...",
-    "pre_release_fixes": [ "..." ],
-    "rollback_steps":   [ { "step": 1, "action": "...", "reason": "..." } ]
-  }
+  "coverage": { "gaps": [ ... ], "covered": [ ... ], "stubs": [ ... ] },
+  "sentinel": { "findings": [ { "kind": "migration_no_code", "severity": "high", "location": "...", "detail": "...", "evidence": "..." } ] },
+  "drafts":   { "release_notes_md": "...", "changelog_md": "...",
+                "pre_release_fixes": [ { "action": "...", "reason": "..." } ],
+                "rollback_steps":   [ { "step": 1, "action": "...", "reason": "..." } ] }
 }
 ```
 
-Full schema is defined in [`app/models.py`](app/models.py).
+The full schema is in [`app/models.py`](app/models.py).
 
----
-
-## Running the Tests
+## Tests
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/ -q
 ```
 
-121 tests across 5 test modules. No external services required.
+121 tests across 5 modules (diff engine, coverage, sentinel, drafter, report). No external services needed.
 
----
+## Limitations
 
-## How IBM Bob Was Used
+PreFlight uses deterministic heuristics (git, Python `ast`, regular expressions). It is built for
+Python / FastAPI-style projects with SQL migrations and `.env.example`, and it has been tested on the
+included sample repository. Other stacks would need new rules. It flags risk for human review;
+it does not replace it.
 
-This project was built entirely in IBM Bob 2.0, a local AI engineering assistant.
+## How IBM Bob was used
 
-### Planning (Plan mode)
+All application code in this repository was written by IBM Bob 2.0 in the Bob IDE. I directed each
+phase, ran and reviewed the results, and decided what to fix. The task-by-task record is in
+[`BOB_USAGE.md`](BOB_USAGE.md), and the session summary screenshots are in [`bob_sessions/`](bob_sessions/).
 
-Bob was used in Plan mode to design the full system before writing any code. It
-produced `docs/PLAN.md` covering the module layout, data flow, report JSON
-schema, parallel subagent delegation table, and a task list. This planning phase
-prevented several integration issues later by making inter-module contracts
-explicit up front.
+- **Project rules:** Bob saved the stack, non-goals and conventions in `AGENTS.md`.
+- **Plan mode:** Bob produced `docs/PLAN.md` (module layout, data flow, report schema, subagent delegation), using an explore subagent to inspect the workspace first.
+- **Agent mode, sample repo:** Bob built `sample-repo/` with 21 commits, two tags and the four planted issues.
+- **Parallel subagents, phase 3a:** after writing the shared models and git utilities, Bob ran three subagents at once (diff engine, coverage mapper, sentinel). It noticed a problem with one subagent's test fixture and fixed it; 51 tests passed.
+- **Parallel subagents, phase 3b:** two subagents (drafter, dashboard) ran in parallel, then Bob wrote the orchestrator, the API and the run scripts; 80 tests passed.
+- **Review and fix rounds:** after each phase I ran PreFlight and reviewed its output. That review found real problems: a false coverage reason, harmless changes flagged as risky, a risk score that saturated at 100, stub tests that would overwrite existing files, reversed tag ranges accepted by the API, and a dropdown that adjusted in the wrong direction. I gave Bob the list and Bob implemented the fixes and their tests, catching and correcting two of its own failing tests on the way. The suite grew from 80 to 121 tests.
+- **Manual changes by me:** I unpinned the versions in `requirements.txt` so it installs on Python 3.13 on Windows, and I captured the screenshots in `docs/` and `bob_sessions/`.
 
-### Building (Agent mode)
+Bob used about 27 of the 40 Bobcoins available for the hackathon.
 
-All code was written in Agent mode. The main agent wrote foundation files
-(`app/models.py`, `app/gitutil.py`, `tests/fixtures/report.json`) first, then
-delegated to parallel subagents.
+## License
 
-### Parallel Subagents (Phase 3a and Phase 3b)
-
-- **Phase 3a** — Three subagents ran in parallel: DIFF ENGINE wrote
-  `app/diff_engine.py` + `tests/test_diff_engine.py`; COVERAGE MAPPER wrote
-  `app/coverage.py` + `tests/test_coverage.py`; SENTINEL wrote `app/sentinel.py`
-  + `tests/test_sentinel.py`. All 51 initial tests passed.
-- **Phase 3b** — Two subagents ran in parallel: DRAFTER wrote `app/drafter.py`;
-  DASHBOARD wrote `app/static/index.html`. The main agent then wrote the
-  orchestrator (`app/report.py`) and `app/main.py`.
-
-### Quality-Fix Tasks
-
-After each phase Bob identified gaps itself — missing edge cases, wrong heuristic
-direction, hardcoded caps — and fixed them in targeted follow-up tasks without
-being told to. For example:
-- It replaced the hard risk-score cap with a diminishing-returns formula
-  autonomously after noticing scores were uncalibrated.
-- It detected that the test-existence check was comparing against CWD instead
-  of the analyzed repo path, and fixed it.
-- It noticed the dropdown auto-adjust was moving tags in the wrong direction
-  (newest-first list semantics), and corrected it.
-
-### Facts from BOB_USAGE.md
-
-All facts above are sourced from [`BOB_USAGE.md`](BOB_USAGE.md), which was
-updated after every task.
+MIT, see [`LICENSE`](LICENSE).

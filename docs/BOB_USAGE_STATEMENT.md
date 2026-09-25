@@ -1,78 +1,49 @@
-# assisted-by: IBM Bob 2.0 final-polish — Bob usage statement, task 2026-09-25
+<!-- assisted-by: IBM Bob 2.0 final-polish (first draft); revised by the developer -->
 # PreFlight — How IBM Bob Was Used
 
-All claims in this document are sourced from BOB_USAGE.md.
+All application code in PreFlight was written by IBM Bob 2.0 in the Bob IDE. I directed each phase,
+ran and reviewed the results, and decided what needed fixing. The task log is `BOB_USAGE.md` and the
+session summary screenshots are in `bob_sessions/`.
 
-## Planning
+## Plan mode
 
-Bob was used in Plan mode to design the full system before writing any code.
-It produced `docs/PLAN.md` covering the module layout, data flow diagram, report
-JSON schema, parallel subagent delegation table, and a seven-task plan. This
-planning phase established inter-module contracts (models.py as the single source
-of truth, fixtures/report.json as the shared integration fixture) before any
-code was written.
+Bob first saved the project rules (stack, non-goals, conventions) in `AGENTS.md`. Then, in Plan mode
+with the create-plan skill, it produced `docs/PLAN.md`: module layout, data flow, the report JSON
+schema, score weights, a subagent delegation table with file ownership, and a task list sized to
+the Bobcoin budget. It used an explore subagent to inspect the workspace before planning.
 
-## Sample Repository
+## Agent mode
 
-Bob built the `sample-repo/` nested git repository in a single task: a realistic
-FastAPI Orders API with ORM models, pricing module, config layer, migrations,
-tests, README, and .env.example. It staged 21 commits across two annotated tags
-(v1.0.0 and v1.1.0) and deliberately planted four issues in the diff. No
-parallel subagents were used in this task.
+- **Sample repository:** Bob built a realistic orders API in its own git repository, with 21 commits,
+  two tags and four planted issues, and printed a table mapping each issue to its file and commit.
+- **Phase 3a, parallel subagents:** Bob wrote the shared models and git utilities, then ran three subagents
+  at once with separate file ownership: diff engine, coverage mapper and sentinel. It noticed a problem
+  with one subagent's test fixture and fixed it, and finished with 51 passing tests and all four planted
+  issues detected.
+- **Phase 3b, parallel subagents:** two subagents built the drafter and the dashboard at the same time. Bob
+  then wrote the orchestrator, the FastAPI API and the run scripts. 80 tests passed.
 
-## Parallel Subagents — Phase 3a
+## Review and fix rounds
 
-The main agent wrote `app/models.py`, `app/gitutil.py`, and
-`tests/fixtures/report.json` first. Then three subagents ran in parallel:
+After each phase I ran PreFlight and reviewed the output. This found real problems, for example:
 
-- **DIFF ENGINE** wrote `app/diff_engine.py` and `tests/test_diff_engine.py`
-  (23 tests).
-- **COVERAGE MAPPER** wrote `app/coverage.py` and `tests/test_coverage.py`
-  (28 tests).
-- **SENTINEL** wrote `app/sentinel.py` and `tests/test_sentinel.py` (11 tests).
+- a false coverage reason (a test file was said not to reference a module that it imports);
+- harmless docstring and test changes flagged as risky;
+- a risk score that always hit 100;
+- stub tests that would overwrite existing test files;
+- reversed tag ranges accepted by the API;
+- a dashboard dropdown that adjusted in the wrong direction.
 
-All 51 tests passed. All four planted issues were confirmed found.
+I gave Bob the list of problems. Bob implemented the fixes and their tests, and in the process caught and
+corrected two failing tests of its own. The suite grew from 80 to 121 tests, and the sample release now
+scores 82 (critical) instead of a saturated 100.
 
-## Parallel Subagents — Phase 3b
+## Bob features used
 
-Two subagents ran in parallel:
+Plan mode, Agent mode, parallel subagents with approval of each spawn, skills, the task to-do list,
+project rules in `AGENTS.md`, per-task git commits and the task session summaries.
 
-- **DRAFTER** wrote `app/drafter.py` (7 tests).
-- **DASHBOARD** wrote `app/static/index.html`.
+## My own changes
 
-The main agent then wrote `app/report.py` (orchestrator with risk score), 
-`app/main.py` (FastAPI routes), and `run.sh`. All 80 tests passed at this point.
-
-## Quality-Fix Tasks
-
-Bob ran several targeted quality-fix tasks after the initial build. These were
-driven by Bob identifying its own gaps after reviewing test results and
-end-to-end smoke tests:
-
-- **Function-level gap detection**: coverage analysis was upgraded from
-  module-level to function-level, naming each untested function in the gap
-  reason. Stub generation was updated to emit one skeleton test per untested
-  function.
-- **Docstring-safe diff rules**: a new AST rule marked docstring/comment-only
-  Python changes as safe (not risky), fixing a false positive for `app/config.py`.
-- **Risk score calibration**: the hard cap was replaced with a diminishing-returns
-  formula. Root-cause deduplication was added so route files affected only by a
-  schema change score lower than independently breaking files.
-- **Repo-path test existence**: the stub generation path check was corrected to
-  use the analyzed repository path instead of the current working directory.
-- **Range validation**: `build_report()` now validates that `from` is a strict
-  git ancestor of `to`, returning HTTP 400 on invalid input.
-- **Dropdown direction fix**: the tag-selector auto-adjust in the dashboard was
-  corrected to handle the newest-first ordering of the tag list.
-
-After these tasks the test count grew from 51 to 117, then to 121.
-
-## Summary of Parallelism
-
-Phase 3a used three parallel subagents (A, B, C). Phase 3b used two (D, E).
-All other tasks were handled by the main agent without subagents, as recorded
-in BOB_USAGE.md.
-
----
-
-*Word count: 463*
+I unpinned the library versions in `requirements.txt` so the project installs on Python 3.13 on Windows,
+and I captured the screenshots. About 27 of the 40 Bobcoins were used.

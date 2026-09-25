@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
+# assisted-by: IBM Bob 2.0 final-polish — add test for stub import when no public functions, task 2026-09-25
 """Tests for app.coverage.analyse.
 
 Integration tests run against sample-repo v1.0.0..v1.1.0.
@@ -280,6 +280,54 @@ class TestStubs:
         assert stub is not None
         assert "alpha_one" in stub.content
         assert "alpha_two" in stub.content
+
+
+class TestStubImportForNoPublicFunctions:
+    """Bug fix: stub for a module with no public functions must use
+    'import <module>' instead of the invalid 'from <module> import <stem>'."""
+
+    def test_no_public_fns_new_file_stub_uses_plain_import(self, tmp_path):
+        """New-file stub with no public functions must use 'import app.schemas'."""
+        from app.coverage import _make_stub_content
+
+        # Simulate app/schemas.py: module name stem == 'schemas', no public functions
+        content = _make_stub_content("app/schemas.py", uncovered_fns=None, add_to_existing=False)
+        assert "import app.schemas" in content, (
+            f"Expected 'import app.schemas', got:\n{content}"
+        )
+        assert "from app.schemas import schemas" not in content, (
+            f"Invalid import line still present:\n{content}"
+        )
+
+    def test_no_public_fns_add_to_stub_uses_plain_import(self, tmp_path):
+        """add-to stub with no public functions must use 'import app.schemas'."""
+        from app.coverage import _make_stub_content
+
+        content = _make_stub_content("app/schemas.py", uncovered_fns=None, add_to_existing=True)
+        assert "import app.schemas" in content, (
+            f"Expected 'import app.schemas', got:\n{content}"
+        )
+        assert "from app.schemas import schemas" not in content, (
+            f"Invalid import line still present:\n{content}"
+        )
+
+    def test_empty_uncovered_fns_stub_uses_plain_import(self, tmp_path):
+        """Empty uncovered_fns list (falsy) must also use 'import <module>'."""
+        from app.coverage import _make_stub_content
+
+        content = _make_stub_content("app/schemas.py", uncovered_fns=[], add_to_existing=False)
+        assert "import app.schemas" in content, (
+            f"Expected 'import app.schemas', got:\n{content}"
+        )
+
+    def test_with_uncovered_fns_still_uses_from_import(self, tmp_path):
+        """When uncovered_fns is provided, from-import is still used."""
+        from app.coverage import _make_stub_content
+
+        content = _make_stub_content("app/schemas.py", uncovered_fns=["create"], add_to_existing=False)
+        assert "from app.schemas import create" in content, (
+            f"Expected 'from app.schemas import create', got:\n{content}"
+        )
 
 
 class TestEdgeCases:

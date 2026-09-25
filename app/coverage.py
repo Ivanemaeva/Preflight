@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
+# assisted-by: IBM Bob 2.0 final-polish — fix stub import for modules with no public functions, task 2026-09-25
 """Coverage analyser for PreFlight.
 
 Public API
@@ -146,12 +146,17 @@ def _make_stub_content(
     module = _module_dotpath(source_path)
     stem = _stem(source_path)
     lines: List[str] = []
+    if uncovered_fns:
+        import_line = f"from {module} import {', '.join(uncovered_fns)}"
+    else:
+        import_line = f"import {module}"
+
     if add_to_existing:
         lines += [
             "# ADD the following tests to the existing file",
             f"# Source module: {module}",
             "",
-            f"from {module} import {', '.join(uncovered_fns) if uncovered_fns else stem}",
+            import_line,
             "",
         ]
     else:
@@ -160,7 +165,7 @@ def _make_stub_content(
             f"# Source module: {module}",
             "",
             "import pytest",
-            f"from {module} import {', '.join(uncovered_fns) if uncovered_fns else stem}",
+            import_line,
             "",
         ]
     if uncovered_fns:

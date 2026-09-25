@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — docstring-safe + test-file-safe rules
+# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
 """Tests for app.diff_engine.analyse().
 
 Covers:
@@ -80,6 +80,18 @@ def test_pricing_risky(sample_changes):
     assert fc is not None, "app/pricing.py not found in changeset"
     assert fc.risk == "risky", (
         f"Expected 'risky' for app/pricing.py, got '{fc.risk}'. Reason: {fc.reason}"
+    )
+
+
+def test_pricing_reason_names_new_function(sample_changes):
+    """app/pricing.py reason must mention 'New public function(s) added' with the function name."""
+    fc = sample_changes.get("app/pricing.py")
+    assert fc is not None, "app/pricing.py not found in changeset"
+    assert "New public function(s) added" in fc.reason, (
+        f"Expected 'New public function(s) added' in reason; got: {fc.reason!r}"
+    )
+    assert "calculate_total_cents" in fc.reason, (
+        f"Expected function name in reason; got: {fc.reason!r}"
     )
 
 
@@ -299,6 +311,47 @@ class TestRiskyRules:
         )
         result = analyse(_make_changeset(cf))
         assert result[0].risk == "risky"
+
+    def test_modified_python_adds_new_public_function_reason(self):
+        """Rule 4b: modified Python adding a new public function → specific reason."""
+        cf = _make_file(
+            path="app/pricing.py",
+            status="modified",
+            old_content="def existing(): pass\n",
+            new_content="def existing(): pass\ndef brand_new(): pass\n",
+        )
+        result = analyse(_make_changeset(cf))
+        assert result[0].risk == "risky"
+        assert "New public function(s) added" in result[0].reason
+        assert "brand_new" in result[0].reason
+
+    def test_modified_python_adds_new_class_reason(self):
+        """Rule 4b: modified Python adding a new public class → specific reason."""
+        cf = _make_file(
+            path="app/models.py",
+            status="modified",
+            old_content="class Existing: pass\n",
+            new_content="class Existing: pass\nclass NewModel: pass\n",
+        )
+        result = analyse(_make_changeset(cf))
+        assert result[0].risk == "risky"
+        assert "New public function(s) added" in result[0].reason
+        assert "NewModel" in result[0].reason
+
+    def test_modified_python_no_new_public_symbols_uses_generic_reason(self):
+        """If a modified file does not add new public symbols, use the generic reason."""
+        cf = _make_file(
+            path="app/utils.py",
+            status="modified",
+            old_content="def foo(): return 1\n",
+            new_content="def foo(): return 2\n",
+            lines_added=1,
+            lines_removed=1,
+        )
+        result = analyse(_make_changeset(cf))
+        assert result[0].risk == "risky"
+        # Should NOT use the new-function reason
+        assert "New public function(s) added" not in result[0].reason
 
     def test_modified_python_large_diff_is_risky(self):
         """Rule 5: modified Python with > 20 lines changed → risky."""

@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — docstring-safe + test-file-safe rules
+# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
 """Diff analysis engine for PreFlight.
 
 Public API
@@ -337,6 +337,24 @@ def _classify_file(
             lines_added=cf.lines_added,
             lines_removed=cf.lines_removed,
         )
+
+    # ------------------------------------------------------------------
+    # Rule 4b — modified Python file adds new public functions/classes
+    # ------------------------------------------------------------------
+    if _is_python(path) and status == "modified":
+        old_syms = _public_symbols(cf.old_content)
+        new_syms = _public_symbols(cf.new_content)
+        added_syms = sorted(new_syms - old_syms)
+        if added_syms:
+            names_str = ", ".join(added_syms)
+            return FileChange(
+                path=path,
+                status=status,
+                risk="risky",
+                reason=f"New public function(s) added: {names_str}",
+                lines_added=cf.lines_added,
+                lines_removed=cf.lines_removed,
+            )
 
     # ------------------------------------------------------------------
     # Rule 5 — modified Python, > 20 lines changed

@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — diminishing returns, root-cause dedup, task 2026-09-25
+# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
 """Tests for app/report.py — compute_risk_score and build_report orchestration.
 
 Covers:
@@ -53,6 +53,36 @@ def _sentinel(kind: str, severity: str, location: str) -> SentinelFinding:
 def _raw_to_score(raw: int) -> int:
     """Mirror the diminishing-returns formula from report.py."""
     return round(100 * (1 - math.exp(-raw / _DIMINISHING_SCALE)))
+
+
+# ---------------------------------------------------------------------------
+# Test 1 — sample release (v1.0.0..v1.1.0) scores between 75 and 95
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Test 0 — range validation
+# ---------------------------------------------------------------------------
+
+class TestRangeValidation:
+    """build_report must raise ValueError for invalid tag ranges."""
+
+    def test_same_tag_raises_value_error(self) -> None:
+        """from == to must raise ValueError."""
+        repo = os.getenv("PREFLIGHT_REPO", "./sample-repo")
+        with pytest.raises(ValueError, match="'from' must be an older tag than 'to'"):
+            build_report("v1.0.0", "v1.0.0", repo)
+
+    def test_inverted_range_raises_value_error(self) -> None:
+        """from newer than to must raise ValueError."""
+        repo = os.getenv("PREFLIGHT_REPO", "./sample-repo")
+        with pytest.raises(ValueError, match="'from' must be an older tag than 'to'"):
+            build_report("v1.1.0", "v1.0.0", repo)
+
+    def test_valid_range_does_not_raise(self) -> None:
+        """Valid range must not raise."""
+        repo = os.getenv("PREFLIGHT_REPO", "./sample-repo")
+        report = build_report("v1.0.0", "v1.1.0", repo)
+        assert report is not None
 
 
 # ---------------------------------------------------------------------------

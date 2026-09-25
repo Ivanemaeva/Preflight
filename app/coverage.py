@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — function-level gap detection + add-to stubs, task 2026-09-25
+# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
 """Coverage analyser for PreFlight.
 
 Public API
@@ -151,6 +151,8 @@ def _make_stub_content(
             "# ADD the following tests to the existing file",
             f"# Source module: {module}",
             "",
+            f"from {module} import {', '.join(uncovered_fns) if uncovered_fns else stem}",
+            "",
         ]
     else:
         lines += [
@@ -158,6 +160,7 @@ def _make_stub_content(
             f"# Source module: {module}",
             "",
             "import pytest",
+            f"from {module} import {', '.join(uncovered_fns) if uncovered_fns else stem}",
             "",
         ]
     if uncovered_fns:
@@ -234,8 +237,8 @@ def analyse(changeset: ChangeSet, repo_path: str | None = None) -> Coverage:
             cf.old_content, cf.new_content, test_texts
         )
 
-        # Does the suggested test file already exist on disk (in the preflight repo)?
-        preflight_test_exists = (Path(convention_path)).exists()
+        # Does the suggested test file already exist on disk (in the ANALYZED repo)?
+        preflight_test_exists = (Path(resolved) / convention_path).exists()
 
         if test_files:
             if uncovered:

@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — root-cause dedup, diminishing returns, task 2026-09-25
+# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
 """Orchestrator — merges analyser outputs, computes risk score, returns Report.
 
 Public API
@@ -32,6 +32,8 @@ from __future__ import annotations
 import math
 import os
 from typing import List
+
+import git
 
 from app import coverage as coverage_mod
 from app import diff_engine, sentinel as sentinel_mod
@@ -167,6 +169,18 @@ def build_report(
 ) -> Report:
     """Run all analysers against the tag range and return the full Report."""
     effective_repo = repo_path or os.getenv("PREFLIGHT_REPO", "./sample-repo")
+
+    # Validate range: from must be a strict ancestor of to
+    if from_tag == to_tag:
+        raise ValueError("'from' must be an older tag than 'to'")
+    try:
+        repo = git.Repo(effective_repo)
+        from_commit = repo.commit(from_tag)
+        to_commit = repo.commit(to_tag)
+        if not repo.is_ancestor(from_commit, to_commit):
+            raise ValueError("'from' must be an older tag than 'to'")
+    except git.GitCommandError as exc:
+        raise ValueError(f"Invalid tag: {exc}") from exc
 
     changeset = build_changeset(from_tag, to_tag, effective_repo)
 

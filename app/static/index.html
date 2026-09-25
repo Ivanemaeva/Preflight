@@ -444,25 +444,24 @@ async function loadTags() {
     selFrom.value = tags[0];
     selTo.value   = tags[0];
   }
-  // Prevent From == To: when user changes From, if equal to To, shift To
+  // tags list is newest-first; From must be older (higher index) than To (lower index)
   selFrom.addEventListener('change', function() {
-    if (selFrom.value === selTo.value) {
-      // pick the first option that differs
+    var fromIdx = Array.from(selFrom.options).findIndex(function(o) { return o.value === selFrom.value; });
+    var toIdx   = Array.from(selTo.options).findIndex(function(o) { return o.value === selTo.value; });
+    // From is newer than (or equal to) To — move To to something older than From
+    if (fromIdx <= toIdx) {
       for (var i = 0; i < selTo.options.length; i++) {
-        if (selTo.options[i].value !== selFrom.value) {
-          selTo.value = selTo.options[i].value;
-          break;
-        }
+        if (i > fromIdx) { selTo.value = selTo.options[i].value; break; }
       }
     }
   });
   selTo.addEventListener('change', function() {
-    if (selTo.value === selFrom.value) {
-      for (var i = 0; i < selFrom.options.length; i++) {
-        if (selFrom.options[i].value !== selTo.value) {
-          selFrom.value = selFrom.options[i].value;
-          break;
-        }
+    var fromIdx = Array.from(selFrom.options).findIndex(function(o) { return o.value === selFrom.value; });
+    var toIdx   = Array.from(selTo.options).findIndex(function(o) { return o.value === selTo.value; });
+    // To is older than (or equal to) From — move From to something newer than To
+    if (toIdx >= fromIdx) {
+      for (var i = selFrom.options.length - 1; i >= 0; i--) {
+        if (i < toIdx) { selFrom.value = selFrom.options[i].value; break; }
       }
     }
   });
@@ -484,7 +483,17 @@ async function runAnalysis() {
   let data;
   try {
     const resp = await fetch('/api/report?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to));
-    if (!resp.ok) throw new Error('Server returned ' + resp.status);
+    if (!resp.ok) {
+      let msg;
+      try { const body = await resp.json(); msg = body.detail || JSON.stringify(body); }
+      catch (_) { msg = 'HTTP ' + resp.status; }
+      document.getElementById('msg-error').innerHTML =
+        '<strong>Error ' + resp.status + ':</strong> ' + esc(msg);
+      show('msg-error');
+      hide('msg-loading');
+      btn.disabled = false;
+      return;
+    }
     data = await resp.json();
   } catch (e) {
     console.warn('GET /api/report failed, using FIXTURE_DATA:', e.message);

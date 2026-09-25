@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 Phase 3b — FastAPI wiring
+# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
 """FastAPI application — serves the dashboard and the API.
 
 Routes

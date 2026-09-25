@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — function-level gap detection + add-to stubs, task 2026-09-25
+# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
 """Tests for app.coverage.analyse.
 
 Integration tests run against sample-repo v1.0.0..v1.1.0.
@@ -301,17 +301,26 @@ class TestEdgeCases:
 
 
 class TestAddToExistingStub:
-    """When the suggested test file already exists in the preflight repo,
+    """When the suggested test file already exists in the ANALYZED repo,
     the stub content must be an add-to snippet, not a new-file stub."""
 
-    def test_add_to_header_when_test_file_exists(self, tmp_path, monkeypatch):
+    def test_add_to_header_when_test_file_exists(self, tmp_path):
         """If tests/test_foo.py exists, stub content starts with ADD header."""
         from app.coverage import _make_stub_content
 
         # Test: passing add_to_existing=True must produce the add-to header
         content = _make_stub_content("app/foo.py", uncovered_fns=["new_fn"], add_to_existing=True)
         assert "ADD the following tests" in content
-        assert "import pytest" not in content   # no import line in add-to snippet
+        assert "import pytest" not in content   # no pytest import in add-to snippet
+
+    def test_add_to_stub_includes_import_line(self, tmp_path):
+        """add_to_existing stub must include a from-import line for the uncovered functions."""
+        from app.coverage import _make_stub_content
+
+        content = _make_stub_content("app/foo.py", uncovered_fns=["new_fn"], add_to_existing=True)
+        assert "from app.foo import new_fn" in content, (
+            f"Expected import line in add-to stub; got:\n{content}"
+        )
 
     def test_new_file_stub_when_test_file_missing(self, tmp_path):
         """If tests/test_foo.py does NOT exist, stub is a new-file stub with imports."""
@@ -321,20 +330,16 @@ class TestAddToExistingStub:
         assert "Auto-generated stub" in content
         assert "import pytest" in content
 
-    def test_analyse_marks_add_to_for_existing_preflight_test(self, tmp_path, monkeypatch):
-        """When the convention test file exists relative to CWD,
-        the generated stub content should begin with the ADD comment."""
-        import os
+    def test_analyse_marks_add_to_for_existing_repo_test(self, tmp_path):
+        """When tests/test_bar.py exists inside the REPO (not CWD), stub is add-to."""
         from pathlib import Path
 
-        # Set up a fake preflight workspace with tests/test_bar.py
-        (tmp_path / "tests").mkdir()
-        (tmp_path / "tests" / "test_bar.py").write_text("# existing\n")
-
-        # Set up a fake sample-repo with tests/test_bar.py (for convention discovery)
+        # Create the test file inside the repo (not the CWD)
         repo_tests = tmp_path / "repo" / "tests"
         repo_tests.mkdir(parents=True)
-        (repo_tests / "test_bar.py").write_text("# existing test file — only tests old()\ndef test_old():\n    assert True\n")
+        (repo_tests / "test_bar.py").write_text(
+            "# existing test file — only tests old()\ndef test_old():\n    assert True\n"
+        )
 
         cs = _make_cs(ChangedFile(
             path="app/bar.py",
@@ -343,12 +348,45 @@ class TestAddToExistingStub:
             new_content="def old(): pass\ndef new_fn(): pass\n",
         ))
 
-        # Change CWD to tmp_path so Path("tests/test_bar.py").exists() resolves correctly
-        monkeypatch.chdir(tmp_path)
+        # Do NOT change CWD — test file is in repo only
         cov = analyse(cs, repo_path=str(tmp_path / "repo"))
 
         stub = next((s for s in cov.stubs if "bar" in s.path), None)
         assert stub is not None, "Expected stub for app/bar.py"
         assert "ADD the following tests" in stub.content, (
-            f"Expected add-to stub, got:\n{stub.content}"
+            f"Expected add-to stub (repo-path detection), got:\n{stub.content}"
         )
+
+    def test_analyse_new_file_stub_when_test_not_in_repo(self, tmp_path):
+        """When tests/test_bar.py is absent from the repo, stub is a new-file stub."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        # No tests/ directory in repo
+
+        cs = _make_cs(ChangedFile(
+            path="app/bar.py",
+            status="added",
+            old_content="",
+            new_content="def new_fn(): pass\n",
+        ))
+
+        cov = analyse(cs, repo_path=str(repo_dir))
+
+        stub = next((s for s in cov.stubs if "bar" in s.path), None)
+        assert stub is not None, "Expected stub for app/bar.py"
+        assert "Auto-generated stub" in stub.content, (
+            f"Expected new-file stub, got:\n{stub.content}"
+        )
+
+    def test_pricing_stub_uses_repo_path_for_existence_check(self):
+        """Integration: sample-repo has tests/test_pricing.py; the stub must be add-to."""
+        cs = __import__('app.gitutil', fromlist=['build_changeset']).build_changeset(
+            "v1.0.0", "v1.1.0", repo_path="./sample-repo"
+        )
+        cov = analyse(cs, repo_path="./sample-repo")
+        stub = next((s for s in cov.stubs if "pricing" in s.path), None)
+        assert stub is not None, "Expected pricing stub"
+        assert "ADD the following tests" in stub.content, (
+            f"Expected add-to stub for pricing (test file exists in repo); got:\n{stub.content}"
+        )
+        assert "calculate_total_cents" in stub.content

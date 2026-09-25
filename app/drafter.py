@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — commit-message release notes, pre_release_fixes, task 2026-09-25
+# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
 """Deterministic draft generator — no LLM calls.
 
 Produces release notes, a changelog, and ordered rollback steps
@@ -97,15 +97,36 @@ def draft(
     # ------------------------------------------------------------------
     rn_parts: list[str] = [f"## {to_tag}\n"]
 
-    # Breaking Changes: from diff engine + sentinel api_breaking
-    breaking_items: list[str] = []
+    # Breaking Changes: merge diff-engine + sentinel api_breaking entries per file.
+    # Files that are only flagged via a schema-change impact are labelled accordingly.
+    breaking_schema_paths: set[str] = set()
+    breaking_route_paths: set[str] = set()
     for c in breaking:
-        breaking_items.append(f"- `{c.path}` — {c.reason}")
+        if any(c.path.endswith(s) for s in ("schemas.py", "schema.py", "models.py", "serializers.py")):
+            breaking_schema_paths.add(c.path)
+        elif any(pat in c.path.replace("\\", "/").lower() for pat in ("routes/", "views/", "endpoints/", "handlers/")):
+            breaking_route_paths.add(c.path)
+
+    # Build per-file reason map: path → list of reason strings
+    file_reasons: dict[str, list[str]] = {}
+    for c in breaking:
+        file_reasons.setdefault(c.path, []).append(c.reason)
     for f in sentinel.findings:
         if f.kind == "api_breaking":
-            line = f"- `{f.location}` — {f.detail}"
-            if line not in breaking_items:
-                breaking_items.append(line)
+            file_reasons.setdefault(f.location, []).append(f.detail)
+
+    breaking_items: list[str] = []
+    for path, reasons in file_reasons.items():
+        combined = "; ".join(dict.fromkeys(reasons))  # dedup while preserving order
+        is_schema_impacted_only = (
+            path in breaking_route_paths
+            and breaking_schema_paths
+            and path not in breaking_schema_paths
+        )
+        if is_schema_impacted_only:
+            breaking_items.append(f"- `{path}` — affected by the schema change: {combined}")
+        else:
+            breaking_items.append(f"- `{path}` — {combined}")
 
     if breaking_items:
         rn_parts.append("### ⚠ Breaking Changes")

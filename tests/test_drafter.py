@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — commit-message sections, pre_release_fixes, task 2026-09-25
+# assisted-by: IBM Bob 2.0 four-fix task — repo-path test existence, range validation, drafter dedup, diff reason, task 2026-09-25
 """Tests for app/drafter.py — all inputs built from tests/fixtures/report.json."""
 
 from __future__ import annotations
@@ -149,6 +149,28 @@ def test_group_commits_sections():
 def test_release_notes_has_breaking_section(drafts):
     """Fixture has 2 breaking changes — section header must appear."""
     assert "⚠ Breaking Changes" in drafts.release_notes_md
+
+
+def test_breaking_changes_merged_per_file(drafts):
+    """Diff-engine + sentinel reasons for the SAME file must be merged into one bullet."""
+    rn = drafts.release_notes_md
+    # Both app/schemas.py entries (diff engine + sentinel api_breaking) → one bullet
+    lines = [l for l in rn.splitlines() if "app/schemas.py" in l]
+    assert len(lines) == 1, (
+        f"Expected exactly 1 bullet for app/schemas.py, got {len(lines)}: {lines}"
+    )
+
+
+def test_route_file_labelled_affected_by_schema_change(drafts):
+    """Routes only impacted by a schema change must be labelled 'affected by the schema change'."""
+    rn = drafts.release_notes_md
+    routes_line = next(
+        (l for l in rn.splitlines() if "orders.py" in l), None
+    )
+    assert routes_line is not None, "No line for orders.py in release notes"
+    assert "affected by the schema change" in routes_line, (
+        f"Expected 'affected by the schema change' label on route bullet; got: {routes_line!r}"
+    )
 
 
 def test_release_notes_has_db_section(drafts):

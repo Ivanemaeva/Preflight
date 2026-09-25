@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 Phase 3a — DIFF ENGINE
+# assisted-by: IBM Bob 2.0 quality-fix — docstring-safe + test-file-safe rules
 """Diff analysis engine for PreFlight.
 
 Public API
@@ -124,6 +124,82 @@ def _is_migration(path: str) -> bool:
     return "migrations/" in path or "migrations\\" in path
 
 
+def _is_test_file(path: str) -> bool:
+    """Return True for files under a tests/ directory."""
+    return path.startswith("tests/") or "/tests/" in path
+
+
+def _strip_docstrings(source: str) -> ast.Module | None:
+    """Parse *source* and return an AST with all docstring nodes removed.
+
+    Returns None on parse failure.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+
+    class _DocstringStripper(ast.NodeTransformer):
+        def _strip(self, node: ast.AST) -> ast.AST:
+            if (
+                isinstance(node.body[0], ast.Expr)  # type: ignore[attr-defined]
+                and isinstance(node.body[0].value, ast.Constant)  # type: ignore[attr-defined]
+                and isinstance(node.body[0].value.value, str)
+            ):
+                node.body = node.body[1:]  # type: ignore[attr-defined]
+            return node
+
+        def visit_Module(self, node: ast.Module) -> ast.AST:
+            self.generic_visit(node)
+            return self._strip(node) if node.body else node
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+            self.generic_visit(node)
+            return self._strip(node) if node.body else node
+
+        visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST:
+            self.generic_visit(node)
+            return self._strip(node) if node.body else node
+
+    return _DocstringStripper().visit(tree)
+
+
+def _only_docstring_or_comment_change(old: str, new: str) -> bool:
+    """Return True when old and new differ only in docstrings or comment lines.
+
+    Strategy:
+    1. Strip comments from both texts.
+    2. Parse both stripped texts and remove docstring nodes via AST.
+    3. Compare ast.dump() of the two resulting trees.
+    """
+    if not old.strip() or not new.strip():
+        return False
+
+    def _strip_comments(src: str) -> str:
+        """Remove # comment lines (keep non-comment lines, preserving structure)."""
+        lines = []
+        for line in src.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                lines.append("")
+            else:
+                lines.append(line)
+        return "\n".join(lines)
+
+    old_nc = _strip_comments(old)
+    new_nc = _strip_comments(new)
+
+    old_tree = _strip_docstrings(old_nc)
+    new_tree = _strip_docstrings(new_nc)
+
+    if old_tree is None or new_tree is None:
+        return False
+
+    return ast.dump(old_tree) == ast.dump(new_tree)
+
+
 def _classify_file(
     cf: ChangedFile,
     breaking_response_classes: set[str],
@@ -136,6 +212,33 @@ def _classify_file(
     path = cf.path
     status = cf.status
     lines_total = cf.lines_added + cf.lines_removed
+
+    # ------------------------------------------------------------------
+    # Rule 0a — test files are safe unless deleted
+    # ------------------------------------------------------------------
+    if _is_test_file(path) and status != "deleted":
+        return FileChange(
+            path=path,
+            status=status,
+            risk="safe",
+            reason="Test file modified (not deleted)",
+            lines_added=cf.lines_added,
+            lines_removed=cf.lines_removed,
+        )
+
+    # ------------------------------------------------------------------
+    # Rule 0b — docstring / comment-only Python change is safe
+    # ------------------------------------------------------------------
+    if _is_python(path) and status == "modified":
+        if _only_docstring_or_comment_change(cf.old_content, cf.new_content):
+            return FileChange(
+                path=path,
+                status=status,
+                risk="safe",
+                reason="Only docstrings or comments changed — no logic modified",
+                lines_added=cf.lines_added,
+                lines_removed=cf.lines_removed,
+            )
 
     # ------------------------------------------------------------------
     # Rule 1 & 2 — Python AST checks (breaking)

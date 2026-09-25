@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 Phase 3a — COVERAGE MAPPER
+# assisted-by: IBM Bob 2.0 quality-fix — function-level gap detection
 """Tests for app.coverage.analyse.
 
 Integration tests run against sample-repo v1.0.0..v1.1.0.
@@ -58,6 +58,31 @@ def test_pricing_in_gaps(coverage):
     )
 
 
+def test_pricing_gap_function_level_reason(coverage):
+    """pricing.py gap reason must name calculate_total_cents() specifically."""
+    pricing_gap = next(
+        (g for g in coverage.gaps if g.path == "app/pricing.py"), None
+    )
+    assert pricing_gap is not None, "app/pricing.py not found in gaps"
+    assert "calculate_total_cents()" in pricing_gap.reason, (
+        f"Expected function name in reason; got: {pricing_gap.reason!r}"
+    )
+    assert "tests/test_pricing.py" in pricing_gap.reason, (
+        f"Expected test file name in reason; got: {pricing_gap.reason!r}"
+    )
+
+
+def test_pricing_stub_has_function_test(coverage):
+    """Stub for pricing.py must have a test_calculate_total_cents skeleton."""
+    pricing_stub = next(
+        (s for s in coverage.stubs if "pricing" in s.path), None
+    )
+    assert pricing_stub is not None, "No stub found for pricing"
+    assert "calculate_total_cents" in pricing_stub.content, (
+        f"Expected calculate_total_cents in stub; got:\n{pricing_stub.content}"
+    )
+
+
 def test_webhooks_in_gaps(coverage):
     """app/webhooks.py must appear in gaps (new module, no test file)."""
     assert "app/webhooks.py" in _paths(coverage.gaps), (
@@ -86,6 +111,15 @@ def test_webhooks_gap_reason_new_module(coverage):
     )
     assert webhooks_gap is not None
     assert "New module" in webhooks_gap.reason
+    # Ensure pricing.py does NOT use the wrong "New module" or "No test file
+    # imports or references" message — it has a test file, just missing the fn
+    pricing_gap = next(
+        (g for g in coverage.gaps if g.path == "app/pricing.py"), None
+    )
+    assert pricing_gap is not None
+    assert "No test file imports or references" not in pricing_gap.reason, (
+        f"pricing.py has a test file; wrong reason: {pricing_gap.reason!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -119,10 +153,38 @@ class TestNamingConvention:
         tests_dir.mkdir()
         # test file only tests old_func, not new_func
         (tests_dir / "test_foo.py").write_text("def test_old_func():\n    assert old_func() == 0\n")
+        old_content = "def old_func():\n    return 0\n"
         new_content = "def old_func():\n    return 0\n\ndef new_func():\n    return 99\n"
-        cs = _make_cs(_cf("app/foo.py", new_content=new_content))
+        cs = _make_cs(ChangedFile(
+            path="app/foo.py",
+            status="modified",
+            old_content=old_content,
+            new_content=new_content,
+        ))
         cov = analyse(cs, repo_path=str(tmp_path))
         assert "app/foo.py" in _paths(cov.gaps)
+        gap = next(g for g in cov.gaps if g.path == "app/foo.py")
+        # Reason must mention the specific function, not a generic module message
+        assert "new_func()" in gap.reason
+
+    def test_gap_reason_mentions_test_file(self, tmp_path):
+        """Gap reason must name the existing test file when one exists."""
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        # test file does not call or reference new_fn anywhere (no word match)
+        (tests_dir / "test_foo.py").write_text("def test_existing():\n    existing()\n")
+        old_content = "def existing(): pass\n"
+        new_content = "def existing(): pass\ndef new_fn(): pass\n"
+        cs = _make_cs(ChangedFile(
+            path="app/foo.py",
+            status="modified",
+            old_content=old_content,
+            new_content=new_content,
+        ))
+        cov = analyse(cs, repo_path=str(tmp_path))
+        gap = next((g for g in cov.gaps if g.path == "app/foo.py"), None)
+        assert gap is not None
+        assert "tests/test_foo.py" in gap.reason
 
 
 class TestImportScan:
@@ -192,7 +254,7 @@ class TestStubs:
         assert "New module added" in gap.reason
 
     def test_stub_reason_modified(self, tmp_path):
-        """Modified file with no tests should have appropriate reason."""
+        """Modified file with no tests and a new function → gap mentions function name."""
         cs = _make_cs(ChangedFile(
             path="app/existing.py",
             status="modified",
@@ -202,7 +264,22 @@ class TestStubs:
         cov = analyse(cs, repo_path=str(tmp_path))
         gap = next((g for g in cov.gaps if g.path == "app/existing.py"), None)
         assert gap is not None
+        # No test file at all → the "No test file" generic reason applies
         assert "No test file" in gap.reason
+
+    def test_stub_has_per_function_skeleton(self, tmp_path):
+        """Stub for a file with uncovered functions should have per-function tests."""
+        cs = _make_cs(ChangedFile(
+            path="app/alpha.py",
+            status="added",
+            old_content="",
+            new_content="def alpha_one(): pass\ndef alpha_two(): pass\n",
+        ))
+        cov = analyse(cs, repo_path=str(tmp_path))
+        stub = next((s for s in cov.stubs if "alpha" in s.path), None)
+        assert stub is not None
+        assert "alpha_one" in stub.content
+        assert "alpha_two" in stub.content
 
 
 class TestEdgeCases:

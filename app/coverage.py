@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 Phase 3a — COVERAGE MAPPER
+# assisted-by: IBM Bob 2.0 quality-fix — function-level gap detection
 """Coverage analyser for PreFlight.
 
 Public API
@@ -8,6 +8,7 @@ analyse(changeset, repo_path) -> Coverage
 
 from __future__ import annotations
 
+import ast
 import os
 import re
 from pathlib import Path
@@ -19,8 +20,6 @@ from app.models import ChangeSet, Coverage, CoveredFile, CoverageGap, CoverageSt
 _IMPORT_RE = re.compile(
     r"(?:^|\s)(?:import|from)\s+([\w\.]+)"
 )
-
-_DEF_RE = re.compile(r"^(?:def|class)\s+(\w+)", re.MULTILINE)
 
 
 def _module_dotpath(source_path: str) -> str:
@@ -72,31 +71,95 @@ def _find_test_files_by_import(
     return found
 
 
-def _uncovered_functions(new_content: str, test_texts: List[str]) -> List[str]:
-    """Return function/class names defined in new_content that appear in none of test_texts."""
-    defined = _DEF_RE.findall(new_content)
-    if not defined:
+def _public_functions_in_source(source: str) -> List[str]:
+    """Return names of public module-level functions in *source* (via AST).
+
+    A function is public when its name does not start with '_'.
+    Returns [] on empty source or parse failure.
+    """
+    if not source.strip():
+        return []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    names: List[str] = []
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if not node.name.startswith("_"):
+                names.append(node.name)
+    return names
+
+
+def _added_or_changed_public_functions(
+    old_content: str, new_content: str
+) -> List[str]:
+    """Return public function names that were added or were already present in new_content.
+
+    For a newly added file (old_content is empty) every public function is
+    considered "added".  For a modified file only functions whose name is new
+    relative to old_content are returned (i.e. genuine additions).
+    """
+    new_fns = _public_functions_in_source(new_content)
+    if not old_content.strip():
+        # Brand-new file — all functions are new
+        return new_fns
+    old_fns = set(_public_functions_in_source(old_content))
+    return [fn for fn in new_fns if fn not in old_fns]
+
+
+def _uncovered_added_functions(
+    old_content: str,
+    new_content: str,
+    test_texts: List[str],
+) -> List[str]:
+    """Return added/new public function names that are not referenced in any test text.
+
+    A function name is considered referenced when it appears as a whole word
+    (i.e. surrounded by word boundaries) in at least one test file.
+    """
+    candidates = _added_or_changed_public_functions(old_content, new_content)
+    if not candidates:
         return []
     combined_tests = "\n".join(test_texts)
-    missing = [name for name in defined if name not in combined_tests]
-    return missing
+    uncovered: List[str] = []
+    for fn in candidates:
+        pattern = re.compile(r"\b" + re.escape(fn) + r"\b")
+        if not pattern.search(combined_tests):
+            uncovered.append(fn)
+    return uncovered
 
 
-def _make_stub_content(source_path: str) -> str:
-    """Generate a placeholder test file for source_path."""
+def _make_stub_content(source_path: str, uncovered_fns: List[str] | None = None) -> str:
+    """Generate a placeholder test file for source_path.
+
+    If *uncovered_fns* is supplied, emit one skeleton test per function.
+    """
     module = _module_dotpath(source_path)
     stem = _stem(source_path)
-    return (
-        f"# Auto-generated stub — replace with real tests\n"
-        f"# Source module: {module}\n"
-        f"\n"
-        f"import pytest\n"
-        f"\n"
-        f"\n"
-        f"def test_{stem}_placeholder():\n"
-        f"    \"\"\"TODO: write tests for {module}\"\"\"\n"
-        f"    raise NotImplementedError(\"Stub — not yet implemented\")\n"
-    )
+    lines: List[str] = [
+        "# Auto-generated stub — replace with real tests",
+        f"# Source module: {module}",
+        "",
+        "import pytest",
+        "",
+    ]
+    if uncovered_fns:
+        for fn in uncovered_fns:
+            lines += [
+                "",
+                f"def test_{fn}():",
+                f'    """TODO: test {module}.{fn}"""',
+                '    raise NotImplementedError("Stub — not yet implemented")',
+            ]
+    else:
+        lines += [
+            "",
+            f"def test_{stem}_placeholder():",
+            f'    """TODO: write tests for {module}"""',
+            '    raise NotImplementedError("Stub — not yet implemented")',
+        ]
+    return "\n".join(lines) + "\n"
 
 
 def analyse(changeset: ChangeSet, repo_path: str | None = None) -> Coverage:
@@ -124,7 +187,6 @@ def analyse(changeset: ChangeSet, repo_path: str | None = None) -> Coverage:
             continue
 
         # Treat as "added" when status is added OR old_content is empty
-        # (gitpython sometimes returns change_type=None for new files)
         is_new = cf.status == "added" or cf.old_content == ""
 
         module_dotpath = _module_dotpath(path)
@@ -139,27 +201,33 @@ def analyse(changeset: ChangeSet, repo_path: str | None = None) -> Coverage:
             if hit not in test_files:
                 test_files.append(hit)
 
-        # 3. If test files found, check whether all defined symbols are covered
-        if test_files:
-            # Gather text of each test file for symbol checking
-            test_texts: List[str] = []
-            for tf_rel in test_files:
-                tf_abs = Path(resolved) / tf_rel
-                if tf_abs.exists():
-                    try:
-                        test_texts.append(
-                            tf_abs.read_text(encoding="utf-8", errors="replace")
-                        )
-                    except OSError:
-                        pass
+        # 3. Gather text of each discovered test file
+        test_texts: List[str] = []
+        for tf_rel in test_files:
+            tf_abs = Path(resolved) / tf_rel
+            if tf_abs.exists():
+                try:
+                    test_texts.append(
+                        tf_abs.read_text(encoding="utf-8", errors="replace")
+                    )
+                except OSError:
+                    pass
 
-            missing_fns = _uncovered_functions(cf.new_content, test_texts)
-            if missing_fns:
-                # Test file exists but doesn't cover new symbols → gap
+        # 4. Determine which added/changed public functions are untested
+        uncovered = _uncovered_added_functions(
+            cf.old_content, cf.new_content, test_texts
+        )
+
+        if test_files:
+            if uncovered:
+                # Test file(s) exist but don't reference some new functions
+                fn_list = ", ".join(f"{fn}()" for fn in uncovered)
+                test_file_str = ", ".join(test_files)
                 reason = (
-                    "New module added with no corresponding test file"
-                    if is_new
-                    else "No test file imports or references this module"
+                    f"{fn_list} {'was' if len(uncovered) == 1 else 'were'} added "
+                    f"but no test calls {'it' if len(uncovered) == 1 else 'them'} "
+                    f"({test_file_str} exists but never references "
+                    f"{'it' if len(uncovered) == 1 else 'them'})"
                 )
                 gaps.append(
                     CoverageGap(
@@ -169,17 +237,19 @@ def analyse(changeset: ChangeSet, repo_path: str | None = None) -> Coverage:
                     )
                 )
                 stubs.append(
-                    CoverageStub(path=convention_path, content=_make_stub_content(path))
+                    CoverageStub(
+                        path=convention_path,
+                        content=_make_stub_content(path, uncovered),
+                    )
                 )
             else:
                 covered.append(CoveredFile(path=path, tests=test_files))
         else:
             # No test file found at all
-            reason = (
-                "New module added with no corresponding test file"
-                if is_new
-                else "No test file imports or references this module"
-            )
+            if is_new:
+                reason = "New module added with no corresponding test file"
+            else:
+                reason = "No test file imports or references this module"
             gaps.append(
                 CoverageGap(
                     path=path,
@@ -188,7 +258,10 @@ def analyse(changeset: ChangeSet, repo_path: str | None = None) -> Coverage:
                 )
             )
             stubs.append(
-                CoverageStub(path=convention_path, content=_make_stub_content(path))
+                CoverageStub(
+                    path=convention_path,
+                    content=_make_stub_content(path, uncovered or None),
+                )
             )
 
     return Coverage(gaps=gaps, covered=covered, stubs=stubs)

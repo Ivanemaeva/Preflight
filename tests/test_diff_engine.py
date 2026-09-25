@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 Phase 3a — DIFF ENGINE
+# assisted-by: IBM Bob 2.0 quality-fix — docstring-safe + test-file-safe rules
 """Tests for app.diff_engine.analyse().
 
 Covers:
@@ -107,6 +107,16 @@ def test_at_least_one_safe(sample_changes):
     assert safe_files, (
         "Expected at least one 'safe' file in sample-repo v1.0.0..v1.1.0 changeset. "
         f"All risks: {[(p, fc.risk) for p, fc in sample_changes.items()]}"
+    )
+
+
+def test_config_py_is_safe(sample_changes):
+    """app/config.py only changed its module docstring — must be safe."""
+    fc = sample_changes.get("app/config.py")
+    assert fc is not None, "app/config.py not found in changeset"
+    assert fc.risk == "safe", (
+        f"Expected 'safe' for app/config.py (docstring-only change), "
+        f"got '{fc.risk}'. Reason: {fc.reason}"
     )
 
 
@@ -292,12 +302,13 @@ class TestRiskyRules:
 
     def test_modified_python_large_diff_is_risky(self):
         """Rule 5: modified Python with > 20 lines changed → risky."""
-        lines = "\n".join(f"x{i} = {i}" for i in range(15))
+        old_lines = "\n".join(f"x{i} = {i}" for i in range(15))
+        new_lines = "\n".join(f"x{i} = {i * 2}" for i in range(15))  # logic changed
         cf = _make_file(
             path="app/big_change.py",
             status="modified",
-            old_content=lines,
-            new_content=lines + "\n# extra\n",
+            old_content=old_lines,
+            new_content=new_lines,
             lines_added=15,
             lines_removed=10,  # total = 25 > 20
         )
@@ -321,7 +332,7 @@ class TestRiskyRules:
             path="app/small.py",
             status="modified",
             old_content=src,
-            new_content=src + "# comment\n",
+            new_content=src + "x = 1\n",  # real logic change, not a comment
             lines_added=1,
             lines_removed=0,
         )
@@ -366,3 +377,98 @@ class TestSafeRule:
         )
         result = analyse(_make_changeset(cf))
         assert result[0].risk == "safe"
+
+
+class TestDocstringOnlySafe:
+    """Rule 0b: Python files where only docstrings/comments changed → safe."""
+
+    def test_module_docstring_change_is_safe(self):
+        """Adding/changing module-level docstring only → safe."""
+        old = 'def foo():\n    pass\n'
+        new = '"""New module docstring."""\ndef foo():\n    pass\n'
+        cf = _make_file(
+            path="app/mymod.py",
+            status="modified",
+            old_content=old,
+            new_content=new,
+        )
+        result = analyse(_make_changeset(cf))
+        assert result[0].risk == "safe", (
+            f"Expected safe for docstring-only change; got {result[0].risk}: {result[0].reason}"
+        )
+
+    def test_function_docstring_change_is_safe(self):
+        """Changing a function docstring only → safe."""
+        old = 'def bar():\n    """Old doc."""\n    return 1\n'
+        new = 'def bar():\n    """New, improved doc."""\n    return 1\n'
+        cf = _make_file(
+            path="app/utils.py",
+            status="modified",
+            old_content=old,
+            new_content=new,
+        )
+        result = analyse(_make_changeset(cf))
+        assert result[0].risk == "safe"
+
+    def test_comment_only_change_is_safe(self):
+        """Changing only # comment lines → safe."""
+        old = "# old comment\ndef baz():\n    return 42\n"
+        new = "# new comment, updated\ndef baz():\n    return 42\n"
+        cf = _make_file(
+            path="app/baz.py",
+            status="modified",
+            old_content=old,
+            new_content=new,
+        )
+        result = analyse(_make_changeset(cf))
+        assert result[0].risk == "safe"
+
+    def test_logic_change_is_not_safe(self):
+        """Changing actual logic is not classified as safe."""
+        old = 'def calc():\n    return 1\n'
+        new = 'def calc():\n    return 2\n'
+        cf = _make_file(
+            path="app/calc.py",
+            status="modified",
+            old_content=old,
+            new_content=new,
+        )
+        result = analyse(_make_changeset(cf))
+        assert result[0].risk != "safe"
+
+
+class TestTestFileSafe:
+    """Rule 0a: files under tests/ are safe unless deleted."""
+
+    def test_modified_test_file_is_safe(self):
+        """Modifying a test file → safe."""
+        cf = _make_file(
+            path="tests/test_foo.py",
+            status="modified",
+            old_content="def test_x(): pass\n",
+            new_content="def test_x(): pass\ndef test_y(): pass\n",
+        )
+        result = analyse(_make_changeset(cf))
+        assert result[0].risk == "safe"
+
+    def test_added_test_file_is_safe(self):
+        """Adding a new test file → safe."""
+        cf = _make_file(
+            path="tests/test_new.py",
+            status="added",
+            new_content="def test_new(): pass\n",
+        )
+        result = analyse(_make_changeset(cf))
+        assert result[0].risk == "safe"
+
+    def test_deleted_test_file_is_not_safe(self):
+        """Deleting a test file should NOT be safe (the breaking/risky rules decide)."""
+        cf = _make_file(
+            path="tests/test_gone.py",
+            status="deleted",
+            old_content="def test_x(): pass\n",
+            new_content="",
+        )
+        result = analyse(_make_changeset(cf))
+        # Should not be safe — a deleted test file is a risk signal
+        assert result[0].risk != "safe"

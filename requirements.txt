@@ -1,0 +1,7 @@
+# assisted-by: IBM Bob 2.0 Phase 3a — foundation
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+pydantic==2.6.4
+gitpython==3.1.43
+pytest==8.1.1
+httpx==0.27.0

@@ -1,0 +1,147 @@
+{
+  "range": {
+    "from": "v1.0.0",
+    "to": "v1.1.0",
+    "commits": 9,
+    "files_changed": 8
+  },
+  "risk": {
+    "score": 95,
+    "level": "critical",
+    "drivers": [
+      { "label": "breaking change in app/schemas.py (total renamed to total_cents, type changed)", "points": 25 },
+      { "label": "breaking change in app/routes/orders.py (response field rename)", "points": 25 },
+      { "label": "sentinel: migration_no_code — migrations/0003_add_discount_code.sql", "points": 20 },
+      { "label": "sentinel: api_breaking — app/schemas.py total->total_cents", "points": 20 },
+      { "label": "sentinel: env_undocumented — PAYMENT_WEBHOOK_SECRET in app/webhooks.py", "points": 20 },
+      { "label": "coverage gap — app/pricing.py (calculate_total_cents untested)", "points": 8 },
+      { "label": "coverage gap — app/webhooks.py (no tests)", "points": 8 }
+    ]
+  },
+  "changes": [
+    {
+      "path": "app/schemas.py",
+      "status": "modified",
+      "risk": "breaking",
+      "reason": "Public response field 'total' renamed to 'total_cents' and type changed from float to int",
+      "lines_added": 1,
+      "lines_removed": 1
+    },
+    {
+      "path": "app/routes/orders.py",
+      "status": "modified",
+      "risk": "breaking",
+      "reason": "All route handlers now set total_cents instead of total — clients expecting 'total' will receive null",
+      "lines_added": 4,
+      "lines_removed": 4
+    },
+    {
+      "path": "app/pricing.py",
+      "status": "modified",
+      "risk": "risky",
+      "reason": "New public function calculate_total_cents added with no test coverage",
+      "lines_added": 12,
+      "lines_removed": 1
+    },
+    {
+      "path": "app/webhooks.py",
+      "status": "added",
+      "risk": "risky",
+      "reason": "New module added with no tests; reads undocumented env var PAYMENT_WEBHOOK_SECRET",
+      "lines_added": 40,
+      "lines_removed": 0
+    },
+    {
+      "path": "app/main.py",
+      "status": "modified",
+      "risk": "safe",
+      "reason": "Version string bumped and webhooks router registered",
+      "lines_added": 3,
+      "lines_removed": 1
+    },
+    {
+      "path": "migrations/0003_add_discount_code.sql",
+      "status": "added",
+      "risk": "risky",
+      "reason": "Schema migration adds column with no corresponding ORM or application code change",
+      "lines_added": 4,
+      "lines_removed": 0
+    },
+    {
+      "path": "README.md",
+      "status": "modified",
+      "risk": "safe",
+      "reason": "Documentation update — new endpoint row added to table",
+      "lines_added": 2,
+      "lines_removed": 0
+    },
+    {
+      "path": "app/config.py",
+      "status": "modified",
+      "risk": "safe",
+      "reason": "Docstring expanded — no logic change",
+      "lines_added": 4,
+      "lines_removed": 0
+    }
+  ],
+  "coverage": {
+    "gaps": [
+      {
+        "path": "app/pricing.py",
+        "reason": "calculate_total_cents is a new public function; tests/test_pricing.py does not import or call it",
+        "suggested_test": "tests/test_pricing.py"
+      },
+      {
+        "path": "app/webhooks.py",
+        "reason": "New module with no corresponding test file",
+        "suggested_test": "tests/test_webhooks.py"
+      }
+    ],
+    "covered": [
+      { "path": "app/routes/orders.py", "tests": ["tests/test_orders.py"] },
+      { "path": "app/schemas.py",       "tests": ["tests/test_orders.py"] },
+      { "path": "app/main.py",          "tests": ["tests/test_orders.py"] },
+      { "path": "app/config.py",        "tests": ["tests/test_config.py"] }
+    ],
+    "stubs": [
+      {
+        "path": "tests/test_webhooks.py",
+        "content": "# TODO: tests for app/webhooks.py\nimport pytest\n\n# def test_payment_webhook_missing_secret(client):\n#     resp = client.post('/webhooks/payment', json={})\n#     assert resp.status_code in (401, 503)\n"
+      }
+    ]
+  },
+  "sentinel": {
+    "findings": [
+      {
+        "kind": "migration_no_code",
+        "severity": "high",
+        "location": "migrations/0003_add_discount_code.sql",
+        "detail": "Migration adds 'discount_code' column to orders table but no ORM model, Pydantic schema, or route references this column",
+        "evidence": "ALTER TABLE orders ADD COLUMN discount_code TEXT DEFAULT NULL;"
+      },
+      {
+        "kind": "api_breaking",
+        "severity": "high",
+        "location": "app/schemas.py",
+        "detail": "Response field 'total' (float) removed and replaced by 'total_cents' (int) — no API version bump",
+        "evidence": "-    total: float\n+    total_cents: int"
+      },
+      {
+        "kind": "env_undocumented",
+        "severity": "high",
+        "location": "app/webhooks.py",
+        "detail": "PAYMENT_WEBHOOK_SECRET is read via os.getenv() but is absent from .env.example and the README env-var table",
+        "evidence": "PAYMENT_WEBHOOK_SECRET = os.getenv(\"PAYMENT_WEBHOOK_SECRET\")"
+      }
+    ]
+  },
+  "drafts": {
+    "release_notes_md": "## v1.1.0\n\n### ⚠ Breaking Changes\n- `GET /orders/{id}` and all order endpoints: response field `total` (float) has been renamed to `total_cents` (int). Update all API clients.\n\n### New Features\n- Payment webhook endpoint `POST /webhooks/payment` with HMAC-SHA256 signature verification.\n- Pricing module now exposes `calculate_total_cents` for integer-cent totals.\n\n### Database\n- Migration `0003_add_discount_code.sql`: adds optional `discount_code` column to the `orders` table.\n\n### Other\n- Config module docstring expanded.\n- README updated with webhook endpoint reference.\n",
+    "changelog_md": "### Changed\n- `OrderResponse.total: float` → `OrderResponse.total_cents: int` (breaking)\n- App version bumped to 1.1.0\n\n### Added\n- `POST /webhooks/payment` endpoint\n- `app/pricing.calculate_total_cents()`\n- `migrations/0003_add_discount_code.sql`\n- `tests/test_config.py`\n\n### Fixed\n- Config module docstring\n",
+    "rollback_steps": [
+      { "step": 1, "action": "Revert git tag to v1.0.0: git checkout v1.0.0", "reason": "Breaking API change present — total renamed to total_cents" },
+      { "step": 2, "action": "Roll back database migration 0003: ALTER TABLE orders DROP COLUMN discount_code", "reason": "discount_code column has no application code; safe to drop" },
+      { "step": 3, "action": "Redeploy v1.0.0 application image", "reason": "Restore known-good API contract for downstream clients" }
+    ]
+  }
+}

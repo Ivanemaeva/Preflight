@@ -1,0 +1,7 @@
+# assisted-by: IBM Bob 2.0 final-polish -- packaging, task 2026-09-25
+sample-repo/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+

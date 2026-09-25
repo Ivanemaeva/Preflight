@@ -367,6 +367,12 @@
       <div id="release-content"></div>
     </div>
 
+    <!-- Fix before release -->
+    <div class="card" id="card-prefixes">
+      <div class="card-title"><span class="icon">🔧</span> Fix Before Release</div>
+      <div id="prefixes-content"></div>
+    </div>
+
     <!-- Rollback -->
     <div class="card" id="card-rollback">
       <div class="card-title"><span class="icon">↩️</span> Rollback Plan</div>
@@ -421,17 +427,44 @@ async function loadTags() {
     tags = await resp.json();
   } catch (e) {
     console.warn('GET /api/tags failed, using fallback tags:', e.message);
-    tags = ['v1.0.0', 'v1.1.0'];
+    tags = ['v1.1.0', 'v1.0.0'];
   }
-  const from = document.getElementById('sel-from');
-  const to   = document.getElementById('sel-to');
-  tags.forEach(function(t, i) {
-    const o1 = new Option(t, t);
-    const o2 = new Option(t, t);
-    if (i === 0) o1.selected = true;
-    if (i === tags.length - 1) o2.selected = true;
-    from.appendChild(o1);
-    to.appendChild(o2);
+  // list_tags returns newest-first; From=oldest, To=newest
+  const selFrom = document.getElementById('sel-from');
+  const selTo   = document.getElementById('sel-to');
+  tags.forEach(function(t) {
+    selFrom.appendChild(new Option(t, t));
+    selTo.appendChild(new Option(t, t));
+  });
+  // Default: From = oldest tag (last), To = newest tag (first)
+  if (tags.length >= 2) {
+    selFrom.value = tags[tags.length - 1];
+    selTo.value   = tags[0];
+  } else if (tags.length === 1) {
+    selFrom.value = tags[0];
+    selTo.value   = tags[0];
+  }
+  // Prevent From == To: when user changes From, if equal to To, shift To
+  selFrom.addEventListener('change', function() {
+    if (selFrom.value === selTo.value) {
+      // pick the first option that differs
+      for (var i = 0; i < selTo.options.length; i++) {
+        if (selTo.options[i].value !== selFrom.value) {
+          selTo.value = selTo.options[i].value;
+          break;
+        }
+      }
+    }
+  });
+  selTo.addEventListener('change', function() {
+    if (selTo.value === selFrom.value) {
+      for (var i = 0; i < selFrom.options.length; i++) {
+        if (selFrom.options[i].value !== selTo.value) {
+          selFrom.value = selFrom.options[i].value;
+          break;
+        }
+      }
+    }
   });
 }
 
@@ -614,11 +647,30 @@ function renderSentinel(sentinel) {
   setHTML('sentinel-content', html);
 }
 
-/* Drafts (release notes + rollback) */
+/* Drafts (release notes + rollback + pre_release_fixes) */
 function renderDrafts(drafts) {
   // Release notes
   const notes = (drafts && drafts.release_notes_md) ? drafts.release_notes_md : '';
   setHTML('release-content', '<pre class="release-notes">' + esc(notes) + '</pre>');
+
+  // Fix before release (pre_release_fixes)
+  const fixes = (drafts && drafts.pre_release_fixes) ? drafts.pre_release_fixes : [];
+  if (!fixes.length) {
+    setHTML('prefixes-content', '<p class="empty-note">No pre-release fixes required.</p>');
+  } else {
+    let fhtml = '<ul class="rollback-list">';
+    fixes.forEach(function(f) {
+      fhtml += '<li>';
+      fhtml += '<div class="step-num" style="background:#d97706">!</div>';
+      fhtml += '<div>';
+      fhtml += '<div class="step-action">' + esc(f.action) + '</div>';
+      fhtml += '<div class="step-reason">' + esc(f.reason) + '</div>';
+      fhtml += '</div>';
+      fhtml += '</li>';
+    });
+    fhtml += '</ul>';
+    setHTML('prefixes-content', fhtml);
+  }
 
   // Rollback steps
   const steps = (drafts && drafts.rollback_steps) ? drafts.rollback_steps : [];

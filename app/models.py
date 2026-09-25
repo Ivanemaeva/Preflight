@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 Phase 3a — foundation
+# assisted-by: IBM Bob 2.0 quality-fix — pre_release_fixes field, task 2026-09-25
 """Pydantic models — single source of truth for the PreFlight report JSON.
 
 Schema matches docs/PLAN.md §3 exactly.
@@ -124,10 +124,17 @@ class RollbackStep(BaseModel):
     reason: str
 
 
+class PreReleaseFix(BaseModel):
+    """An action that must be done before the release goes out (not a rollback step)."""
+    action: str
+    reason: str
+
+
 class Drafts(BaseModel):
     release_notes_md: str = ""
     changelog_md: str = ""
     rollback_steps: List[RollbackStep] = Field(default_factory=list)
+    pre_release_fixes: List[PreReleaseFix] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# assisted-by: IBM Bob 2.0 Phase 3b — run script
+# assisted-by: IBM Bob 2.0 quality-fix — host 127.0.0.1, python3 -m uvicorn, task 2026-09-25
 # Usage: ./run.sh [repo_path]
 # repo_path defaults to ./sample-repo
 
@@ -9,7 +9,7 @@ REPO_PATH="${1:-./sample-repo}"
 export PREFLIGHT_REPO="$REPO_PATH"
 
 echo "Installing dependencies..."
-pip install -r requirements.txt -q
+pip3 install -r requirements.txt -q
 
-echo "Starting PreFlight on http://localhost:8000 (repo: $REPO_PATH)"
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+echo "Starting PreFlight on http://127.0.0.1:8000 (repo: $REPO_PATH)"
+python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload

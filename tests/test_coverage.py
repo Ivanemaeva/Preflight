@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — function-level gap detection
+# assisted-by: IBM Bob 2.0 quality-fix — function-level gap detection + add-to stubs, task 2026-09-25
 """Tests for app.coverage.analyse.
 
 Integration tests run against sample-repo v1.0.0..v1.1.0.
@@ -298,3 +298,57 @@ class TestEdgeCases:
         cov = analyse(cs, repo_path=str(tmp_path))
         assert len(cov.gaps) == 0
         assert len(cov.covered) == 0
+
+
+class TestAddToExistingStub:
+    """When the suggested test file already exists in the preflight repo,
+    the stub content must be an add-to snippet, not a new-file stub."""
+
+    def test_add_to_header_when_test_file_exists(self, tmp_path, monkeypatch):
+        """If tests/test_foo.py exists, stub content starts with ADD header."""
+        from app.coverage import _make_stub_content
+
+        # Test: passing add_to_existing=True must produce the add-to header
+        content = _make_stub_content("app/foo.py", uncovered_fns=["new_fn"], add_to_existing=True)
+        assert "ADD the following tests" in content
+        assert "import pytest" not in content   # no import line in add-to snippet
+
+    def test_new_file_stub_when_test_file_missing(self, tmp_path):
+        """If tests/test_foo.py does NOT exist, stub is a new-file stub with imports."""
+        from app.coverage import _make_stub_content
+
+        content = _make_stub_content("app/foo.py", uncovered_fns=["new_fn"], add_to_existing=False)
+        assert "Auto-generated stub" in content
+        assert "import pytest" in content
+
+    def test_analyse_marks_add_to_for_existing_preflight_test(self, tmp_path, monkeypatch):
+        """When the convention test file exists relative to CWD,
+        the generated stub content should begin with the ADD comment."""
+        import os
+        from pathlib import Path
+
+        # Set up a fake preflight workspace with tests/test_bar.py
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "test_bar.py").write_text("# existing\n")
+
+        # Set up a fake sample-repo with tests/test_bar.py (for convention discovery)
+        repo_tests = tmp_path / "repo" / "tests"
+        repo_tests.mkdir(parents=True)
+        (repo_tests / "test_bar.py").write_text("# existing test file — only tests old()\ndef test_old():\n    assert True\n")
+
+        cs = _make_cs(ChangedFile(
+            path="app/bar.py",
+            status="modified",
+            old_content="def old(): pass\n",
+            new_content="def old(): pass\ndef new_fn(): pass\n",
+        ))
+
+        # Change CWD to tmp_path so Path("tests/test_bar.py").exists() resolves correctly
+        monkeypatch.chdir(tmp_path)
+        cov = analyse(cs, repo_path=str(tmp_path / "repo"))
+
+        stub = next((s for s in cov.stubs if "bar" in s.path), None)
+        assert stub is not None, "Expected stub for app/bar.py"
+        assert "ADD the following tests" in stub.content, (
+            f"Expected add-to stub, got:\n{stub.content}"
+        )

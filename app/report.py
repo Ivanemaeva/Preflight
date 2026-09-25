@@ -1,14 +1,35 @@
-# assisted-by: IBM Bob 2.0 Phase 3b — orchestrator
+# assisted-by: IBM Bob 2.0 quality-fix — root-cause dedup, diminishing returns, task 2026-09-25
 """Orchestrator — merges analyser outputs, computes risk score, returns Report.
 
 Public API
 ----------
 build_report(from_tag, to_tag, repo_path=None) -> Report
 compute_risk_score(changes, sentinel, coverage) -> tuple[int, str, list[RiskDriver]]
+
+Score design
+------------
+Raw points per signal:
+  each 'breaking' change               → +25
+  each 'risky' change                  → +10
+  sentinel high / medium / low         → +20 / +10 / +4
+  coverage gap                         → +8
+
+Root-cause dedup:
+  • sentinel api_breaking for a file already flagged breaking by the diff engine → skipped
+  • a route/view file flagged breaking ONLY because it uses a schema that was itself
+    flagged breaking by the diff engine gets +10 ("impacted by breaking schema change")
+    instead of +25
+
+Diminishing returns (replaces the hard cap):
+  score = round(100 * (1 − exp(−raw / 80)))
+
+Level bands (unchanged from PLAN.md):
+  0–24 low · 25–49 medium · 50–74 high · 75+ critical
 """
 
 from __future__ import annotations
 
+import math
 import os
 from typing import List
 
@@ -28,16 +49,35 @@ from app.models import (
 
 
 # ---------------------------------------------------------------------------
-# Score weights — per docs/PLAN.md §3
+# Score weights
 # ---------------------------------------------------------------------------
 
 _BREAKING_PTS = 25
+_BREAKING_IMPACTED_PTS = 10   # route affected by a breaking schema, not a root cause
 _RISKY_PTS = 10
 _SENTINEL_HIGH = 20
 _SENTINEL_MEDIUM = 10
 _SENTINEL_LOW = 4
 _GAP_PTS = 8
-_SCORE_CAP = 100
+_DIMINISHING_SCALE = 80       # controls knee of the curve
+
+
+# ---------------------------------------------------------------------------
+# Route/schema heuristic
+# ---------------------------------------------------------------------------
+
+_SCHEMA_PATTERNS = ("schemas.py", "schema.py", "models.py", "serializers.py")
+_ROUTE_PATTERNS = ("routes/", "views/", "endpoints/", "handlers/")
+
+
+def _looks_like_schema(path: str) -> bool:
+    p = path.replace("\\", "/").lower()
+    return any(p.endswith(s) for s in _SCHEMA_PATTERNS)
+
+
+def _looks_like_route(path: str) -> bool:
+    p = path.replace("\\", "/").lower()
+    return any(pat in p for pat in _ROUTE_PATTERNS)
 
 
 def _level(score: int) -> str:
@@ -57,22 +97,36 @@ def compute_risk_score(
 ) -> tuple[int, str, List[RiskDriver]]:
     """Compute risk score from analyser outputs.
 
-    De-duplicates: if a file is flagged as 'breaking' by the diff engine AND
-    by sentinel (api_breaking), the sentinel points for that same file are
-    skipped — we count the max contribution once.
+    De-duplication rules:
+    1. sentinel api_breaking for a file already classified 'breaking' by the
+       diff engine → skipped (same root cause already counted).
+    2. A route file classified 'breaking' where a schema file in the same
+       changeset is *also* breaking → the route gets only +10 pts
+       ("impacted by breaking schema change") instead of +25.
     """
     drivers: List[RiskDriver] = []
 
     # Track files already scored via diff-engine to avoid double-counting.
     breaking_paths = {c.path for c in changes if c.risk == "breaking"}
 
+    # Is there at least one breaking schema file?
+    has_breaking_schema = any(_looks_like_schema(p) for p in breaking_paths)
+
     # --- diff engine contributions ---
     for c in changes:
         if c.risk == "breaking":
-            drivers.append(RiskDriver(
-                label=f"breaking change in {c.path}: {c.reason}",
-                points=_BREAKING_PTS,
-            ))
+            if has_breaking_schema and _looks_like_route(c.path) and not _looks_like_schema(c.path):
+                # This route is breaking because a schema it uses changed;
+                # it's an impacted file, not the root cause.
+                drivers.append(RiskDriver(
+                    label=f"impacted by breaking schema change — {c.path}: {c.reason}",
+                    points=_BREAKING_IMPACTED_PTS,
+                ))
+            else:
+                drivers.append(RiskDriver(
+                    label=f"breaking change in {c.path}: {c.reason}",
+                    points=_BREAKING_PTS,
+                ))
         elif c.risk == "risky":
             drivers.append(RiskDriver(
                 label=f"risky change in {c.path}: {c.reason}",
@@ -100,7 +154,8 @@ def compute_risk_score(
         ))
 
     raw = sum(d.points for d in drivers)
-    score = min(raw, _SCORE_CAP)
+    # Diminishing returns: score = round(100 * (1 - exp(-raw / 80)))
+    score = round(100 * (1 - math.exp(-raw / _DIMINISHING_SCALE)))
     level = _level(score)
     return score, level, drivers
 

@@ -1,4 +1,4 @@
-# assisted-by: IBM Bob 2.0 quality-fix — function-level gap detection
+# assisted-by: IBM Bob 2.0 quality-fix — function-level gap detection + add-to stubs, task 2026-09-25
 """Coverage analyser for PreFlight.
 
 Public API
@@ -130,20 +130,36 @@ def _uncovered_added_functions(
     return uncovered
 
 
-def _make_stub_content(source_path: str, uncovered_fns: List[str] | None = None) -> str:
-    """Generate a placeholder test file for source_path.
+def _make_stub_content(
+    source_path: str,
+    uncovered_fns: List[str] | None = None,
+    add_to_existing: bool = False,
+) -> str:
+    """Generate stub content for source_path.
+
+    If *add_to_existing* is True the stub begins with a header comment
+    telling the developer to ADD the snippet to the existing file rather than
+    creating a new one.
 
     If *uncovered_fns* is supplied, emit one skeleton test per function.
     """
     module = _module_dotpath(source_path)
     stem = _stem(source_path)
-    lines: List[str] = [
-        "# Auto-generated stub — replace with real tests",
-        f"# Source module: {module}",
-        "",
-        "import pytest",
-        "",
-    ]
+    lines: List[str] = []
+    if add_to_existing:
+        lines += [
+            "# ADD the following tests to the existing file",
+            f"# Source module: {module}",
+            "",
+        ]
+    else:
+        lines += [
+            "# Auto-generated stub — replace with real tests",
+            f"# Source module: {module}",
+            "",
+            "import pytest",
+            "",
+        ]
     if uncovered_fns:
         for fn in uncovered_fns:
             lines += [
@@ -218,6 +234,9 @@ def analyse(changeset: ChangeSet, repo_path: str | None = None) -> Coverage:
             cf.old_content, cf.new_content, test_texts
         )
 
+        # Does the suggested test file already exist on disk (in the preflight repo)?
+        preflight_test_exists = (Path(convention_path)).exists()
+
         if test_files:
             if uncovered:
                 # Test file(s) exist but don't reference some new functions
@@ -239,7 +258,7 @@ def analyse(changeset: ChangeSet, repo_path: str | None = None) -> Coverage:
                 stubs.append(
                     CoverageStub(
                         path=convention_path,
-                        content=_make_stub_content(path, uncovered),
+                        content=_make_stub_content(path, uncovered, add_to_existing=preflight_test_exists),
                     )
                 )
             else:
@@ -260,7 +279,7 @@ def analyse(changeset: ChangeSet, repo_path: str | None = None) -> Coverage:
             stubs.append(
                 CoverageStub(
                     path=convention_path,
-                    content=_make_stub_content(path, uncovered or None),
+                    content=_make_stub_content(path, uncovered or None, add_to_existing=preflight_test_exists),
                 )
             )
 

@@ -103,9 +103,4 @@ services. PreFlight. Ship with confidence."
 
 ---
 
-## Recording tips
 
-- Speak calmly and pause briefly between sections; trim silences when editing.
-- Keep the final video under 3:00.
-- Screen and voice are enough; appearing on camera is optional.
-- Export as MP4 (1080p).

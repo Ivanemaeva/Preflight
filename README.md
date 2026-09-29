@@ -1,6 +1,8 @@
 <!-- assisted-by: IBM Bob 2.0 final-polish (README first draft); revised by the developer -->
 # PreFlight — Release Risk Auditor
 
+**Live demo:** https://preflight-cjsx.onrender.com/ (free hosting, may take ~30 s to wake up)
+
 ![PreFlight dashboard](docs/dashboard.png)
 
 **PreFlight** answers one question before every release: *"what could this deploy break?"*
